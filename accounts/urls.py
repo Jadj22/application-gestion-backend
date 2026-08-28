@@ -1,0 +1,586 @@
+from django.urls import path
+
+from .health import health
+from .item_assist import ItemDescriptionView, ItemReferenceView
+from .views import (
+    AcceptInvitationView,
+    ActivitiesListView,
+    AdjustmentListCreateView,
+    AlertsListView,
+    AnalyticsView,
+    BookingRequestActionView,
+    BookingRequestDetailView,
+    BookingRequestListView,
+    BusinessListCreateView,
+    BusinessMembersView,
+    BusinessRolesView,
+    BusinessTypeListView,
+    CategoryDetailView,
+    CategoryListCreateView,
+    DashboardView,
+    DecisionsListView,
+    GoogleAuthView,
+    HistoryView,
+    ImageDescriptionView,
+    InventoryClotureView,
+    InventoryCountDetailView,
+    InventoryCountView,
+    InventoryDetailView,
+    InventoryListCreateView,
+    InvitationAcceptView,
+    InvitationPreviewView,
+    InvitationValidateView,
+    ItemDetailView,
+    ItemListCreateView,
+    ItemPhotoView,
+    ItemScanView,
+    ItemStockView,
+    LoginView,
+    MeView,
+    MemberDetailView,
+    MovementHistoryView,
+    NotificationDetailView,
+    NotificationsListView,
+    NotificationsMarkAllReadView,
+    PerformanceAlertListView,
+    PerformanceAlertResolveView,
+    PermissionCatalogView,
+    ProcedureDetailView,
+    ProcedureListCreateView,
+    PublicActiveRequestView,
+    PublicAvailabilityView,
+    PublicBookingRequestAcceptCounterView,
+    PublicBookingRequestCancelView,
+    PublicBookingRequestCreateView,
+    PublicBookingRequestDetailView,
+    PublicBookingRequestRejectCounterView,
+    PublicBookingRequestByTokenView,
+    PublicBusinessDetailView,
+    PublicCategoryListView,
+    PublicCatalogView,
+    PublicCustomerRequestsView,
+    PublicRecoverView,
+    PublicInvoiceDetailView,
+    PublicInvoicePDFView,
+    RecurringTaskDetailView,
+    RecurringTaskListCreateView,
+    RefreshView,
+    RegisterView,
+    ReminderDetailView,
+    ReminderListCreateView,
+    ReservationBulkCreateView,
+    ReservationCancelView,
+    ReservationDetailView,
+    ReservationFinishView,
+    ReservationListCreateView,
+    ReservationStartView,
+    ReservationValidateView,
+    RoleDetailView,
+    RuleDetailView,
+    RulesListView,
+    StockListView,
+    StockMovementCreateView,
+    TaskClotureView,
+    TaskCommentDetailView,
+    TaskCommentListCreateView,
+TaskDetailView,
+    TaskListCreateView,
+    TaskStepPhotoDeleteView,
+    TaskStepPhotoListCreateView,
+    TaskStepUpdateView,
+    InvoiceDetailView,
+    InvoiceListCreateView,
+    InvoicePDFView,
+    InvoiceMarkSentView,
+    InvoiceMarkPaidView,
+    DeviceRegisterView,
+    DeviceUnregisterView,
+)
+
+urlpatterns = [
+    # Offline-First : sonde d'accessibilite du backend. C'est cette route, et
+    # pas l'etat du Wi-Fi, qui fait basculer l'application en mode ONLINE.
+    path("health/", health, name="health"),
+    # Aide a la saisie d'un article : generation IA a partir d'un texte
+    # (sans photo). L'analyse d'image reste sur ai/image-description/.
+    path(
+        "ai/item-description/",
+        ItemDescriptionView.as_view(),
+        name="ai-item-description",
+    ),
+    # Auth (S 1-02)
+    path("auth/register/", RegisterView.as_view(), name="auth-register"),
+    path("auth/login/", LoginView.as_view(), name="auth-login"),
+    path("auth/refresh/", RefreshView.as_view(), name="auth-refresh"),
+    path("auth/google/", GoogleAuthView.as_view(), name="auth-google"),
+    path("auth/me/", MeView.as_view(), name="auth-me"),
+    # Businesses (US-01)
+    path("business-types/", BusinessTypeListView.as_view(), name="business-types"),
+    path("businesses/", BusinessListCreateView.as_view(), name="business-list-create"),
+    # Rôles & permissions (US-04, RM-19)
+    path(
+        "businesses/<uuid:business_id>/roles/",
+        BusinessRolesView.as_view(),
+        name="business-roles",
+    ),
+    path(
+        "businesses/<uuid:business_id>/roles/<uuid:role_id>/",
+        RoleDetailView.as_view(),
+        name="role-detail",
+    ),
+    path("permissions/", PermissionCatalogView.as_view(), name="permission-catalog"),
+    # Invitations (Sprint 10 lien signé, Sprint 11 code) : l'accept et le
+    # validate sont déclarés avant <str:token> pour ne pas être capturés.
+    path(
+        "invitations/accept/",
+        InvitationAcceptView.as_view(),
+        name="invitation-accept",
+    ),
+    path(
+        "invitations/validate/",
+        InvitationValidateView.as_view(),
+        name="invitation-validate",
+    ),
+    path(
+        "invitations/<str:token>/",
+        InvitationPreviewView.as_view(),
+        name="invitation-preview",
+    ),
+    # IA : description automatique d'une photo d'article (Sprint 10)
+    path(
+        "ai/image-description/",
+        ImageDescriptionView.as_view(),
+        name="ai-image-description",
+    ),
+    # Membres (US-02, US-03)
+    path(
+        "businesses/<uuid:business_id>/members/",
+        BusinessMembersView.as_view(),
+        name="business-members",
+    ),
+    path(
+        "businesses/<uuid:business_id>/members/<uuid:member_id>/accept/",
+        AcceptInvitationView.as_view(),
+        name="member-accept",
+    ),
+    path(
+        "businesses/<uuid:business_id>/members/<uuid:member_id>/",
+        MemberDetailView.as_view(),
+        name="member-detail",
+    ),
+    # Catalogue : catégories (US-05)
+    path(
+        "businesses/<uuid:business_id>/categories/",
+        CategoryListCreateView.as_view(),
+        name="category-list-create",
+    ),
+    path(
+        "businesses/<uuid:business_id>/categories/<uuid:category_id>/",
+        CategoryDetailView.as_view(),
+        name="category-detail",
+    ),
+    # Catalogue : articles (US-06, US-07)
+    path(
+        "businesses/<uuid:business_id>/items/",
+        ItemListCreateView.as_view(),
+        name="item-list-create",
+    ),
+    path(
+        "businesses/<uuid:business_id>/items/<uuid:item_id>/",
+        ItemDetailView.as_view(),
+        name="item-detail",
+    ),
+    # Photos (S 2-03)
+    path(
+        "businesses/<uuid:business_id>/items/<uuid:item_id>/photos/",
+        ItemPhotoView.as_view(),
+        name="item-photo-upload",
+    ),
+    path(
+        "businesses/<uuid:business_id>/items/<uuid:item_id>/photos/<uuid:photo_id>/",
+        ItemPhotoView.as_view(),
+        name="item-photo-delete",
+    ),
+    # Stock & traçabilité (Sprint 3)
+    path(
+        "businesses/<uuid:business_id>/stock/",
+        StockListView.as_view(),
+        name="stock-list",
+    ),
+    path(
+        "businesses/<uuid:business_id>/stock/movements/",
+        StockMovementCreateView.as_view(),
+        name="stock-movement-create",
+    ),
+    path(
+        "businesses/<uuid:business_id>/items/<uuid:item_id>/stock/",
+        ItemStockView.as_view(),
+        name="item-stock",
+    ),
+    path(
+        "businesses/<uuid:business_id>/items/<uuid:item_id>/stock/history/",
+        MovementHistoryView.as_view(),
+        name="item-stock-history",
+    ),
+    # Entretien : procédures (US-13, US-14, RM-09)
+    path(
+        "businesses/<uuid:business_id>/procedures/",
+        ProcedureListCreateView.as_view(),
+        name="procedure-list-create",
+    ),
+    path(
+        "businesses/<uuid:business_id>/procedures/<uuid:procedure_id>/",
+        ProcedureDetailView.as_view(),
+        name="procedure-detail",
+    ),
+    # Entretien : tâches et étapes (US-15 à US-17, RM-10, RM-11)
+    path(
+        "businesses/<uuid:business_id>/maintenance/tasks/",
+        TaskListCreateView.as_view(),
+        name="task-list-create",
+    ),
+    path(
+        "businesses/<uuid:business_id>/maintenance/tasks/<uuid:task_id>/",
+        TaskDetailView.as_view(),
+        name="task-detail",
+    ),
+    path(
+        "businesses/<uuid:business_id>/maintenance/tasks/<uuid:task_id>/steps/<uuid:step_id>/",
+        TaskStepUpdateView.as_view(),
+        name="task-step-update",
+    ),
+    path(
+        "businesses/<uuid:business_id>/maintenance/tasks/<uuid:task_id>/cloturer/",
+        TaskClotureView.as_view(),
+        name="task-cloture",
+    ),
+    # Sprint 1: Commentaires sur les tâches
+    path(
+        "businesses/<uuid:business_id>/maintenance/tasks/<uuid:task_id>/comments/",
+        TaskCommentListCreateView.as_view(),
+        name="task-comments",
+    ),
+    path(
+        "businesses/<uuid:business_id>/maintenance/tasks/<uuid:task_id>/comments/<uuid:comment_id>/",
+        TaskCommentDetailView.as_view(),
+        name="task-comment-detail",
+    ),
+    # Sprint 2: Photos sur les étapes
+    path(
+        "businesses/<uuid:business_id>/maintenance/tasks/<uuid:task_id>/steps/<uuid:step_id>/photos/",
+        TaskStepPhotoListCreateView.as_view(),
+        name="step-photos",
+    ),
+    path(
+        "businesses/<uuid:business_id>/maintenance/tasks/<uuid:task_id>/steps/<uuid:step_id>/photos/<uuid:photo_id>/",
+        TaskStepPhotoDeleteView.as_view(),
+        name="step-photo-delete",
+    ),
+    # Sprint 3: Tâches récurrentes
+    path(
+        "businesses/<uuid:business_id>/recurring-tasks/",
+        RecurringTaskListCreateView.as_view(),
+        name="recurring-task-list-create",
+    ),
+    path(
+        "businesses/<uuid:business_id>/recurring-tasks/<uuid:recurring_id>/",
+        RecurringTaskDetailView.as_view(),
+        name="recurring-task-detail",
+    ),
+    # Sprint 3: Rappels
+    path(
+        "businesses/<uuid:business_id>/reminders/",
+        ReminderListCreateView.as_view(),
+        name="reminder-list-create",
+    ),
+    path(
+        "businesses/<uuid:business_id>/reminders/<uuid:reminder_id>/",
+        ReminderDetailView.as_view(),
+        name="reminder-detail",
+    ),
+    # Sprint 4: Historique avec filtres
+    path(
+        "businesses/<uuid:business_id>/history/",
+        HistoryView.as_view(),
+        name="history",
+    ),
+    # Sprint 5: Analytics
+    path(
+        "businesses/<uuid:business_id>/analytics/",
+        AnalyticsView.as_view(),
+        name="analytics",
+    ),
+    # Proposition de reference : calcul pur, sans IA ni cout d'appel.
+    # Placee avant la route <uuid:item_id> pour ne pas etre captee par elle.
+    path(
+        "businesses/<uuid:business_id>/items/next-reference/",
+        ItemReferenceView.as_view(),
+        name="item-next-reference",
+    ),
+    # Sprint 6: QR Code scanning
+    path(
+        "businesses/<uuid:business_id>/items/scan/<str:qr_code>/",
+        ItemScanView.as_view(),
+        name="item-scan",
+    ),
+    # Sprint 9: Alertes de performance
+    path(
+        "businesses/<uuid:business_id>/performance-alerts/",
+        PerformanceAlertListView.as_view(),
+        name="performance-alerts",
+    ),
+    path(
+        "businesses/<uuid:business_id>/performance-alerts/<uuid:alert_id>/resolve/",
+        PerformanceAlertResolveView.as_view(),
+        name="performance-alert-resolve",
+    ),
+    # Disponibilité & fiabilité : inventaires (US-22, US-23)
+    path(
+        "businesses/<uuid:business_id>/inventories/",
+        InventoryListCreateView.as_view(),
+        name="inventory-list-create",
+    ),
+    path(
+        "businesses/<uuid:business_id>/inventories/<uuid:inventory_id>/",
+        InventoryDetailView.as_view(),
+        name="inventory-detail",
+    ),
+    path(
+        "businesses/<uuid:business_id>/inventories/<uuid:inventory_id>/counts/",
+        InventoryCountView.as_view(),
+        name="inventory-count-upsert",
+    ),
+    path(
+        "businesses/<uuid:business_id>/inventories/<uuid:inventory_id>/counts/<uuid:count_id>/",
+        InventoryCountDetailView.as_view(),
+        name="inventory-count-detail",
+    ),
+    path(
+        "businesses/<uuid:business_id>/inventories/<uuid:inventory_id>/cloturer/",
+        InventoryClotureView.as_view(),
+        name="inventory-cloture",
+    ),
+    # Disponibilité & fiabilité : ajustements (US-24, US-26)
+    path(
+        "businesses/<uuid:business_id>/adjustments/",
+        AdjustmentListCreateView.as_view(),
+        name="adjustment-list-create",
+    ),
+    # Alertes, décisions & règles métier (Sprint 6, US-19 à US-21)
+    path(
+        "businesses/<uuid:business_id>/rules/",
+        RulesListView.as_view(),
+        name="rules-list",
+    ),
+    path(
+        "businesses/<uuid:business_id>/rules/<uuid:rule_id>/",
+        RuleDetailView.as_view(),
+        name="rule-detail",
+    ),
+    path(
+        "businesses/<uuid:business_id>/alerts/",
+        AlertsListView.as_view(),
+        name="alerts-list",
+    ),
+    path(
+        "businesses/<uuid:business_id>/decisions/",
+        DecisionsListView.as_view(),
+        name="decisions-list",
+    ),
+    # Collaboration & visibilité (Sprint 7)
+    path(
+        "businesses/<uuid:business_id>/activities/",
+        ActivitiesListView.as_view(),
+        name="activities-list",
+    ),
+    path(
+        "businesses/<uuid:business_id>/notifications/",
+        NotificationsListView.as_view(),
+        name="notifications-list",
+    ),
+    path(
+        "businesses/<uuid:business_id>/notifications/mark-all-read/",
+        NotificationsMarkAllReadView.as_view(),
+        name="notifications-mark-all-read",
+    ),
+    path(
+        "businesses/<uuid:business_id>/notifications/<uuid:notification_id>/",
+        NotificationDetailView.as_view(),
+        name="notification-detail",
+    ),
+    path(
+        "businesses/<uuid:business_id>/dashboard/",
+        DashboardView.as_view(),
+        name="dashboard",
+    ),
+    # Réservations (Sprint 8, US-29 à US-31)
+    path(
+        "businesses/<uuid:business_id>/reservations/",
+        ReservationListCreateView.as_view(),
+        name="reservation-list-create",
+    ),
+    path(
+        "businesses/<uuid:business_id>/reservations/bulk/",
+        ReservationBulkCreateView.as_view(),
+        name="reservation-bulk-create",
+    ),
+    path(
+        "businesses/<uuid:business_id>/reservations/<uuid:reservation_id>/",
+        ReservationDetailView.as_view(),
+        name="reservation-detail",
+    ),
+    path(
+        "businesses/<uuid:business_id>/reservations/<uuid:reservation_id>/valider/",
+        ReservationValidateView.as_view(),
+        name="reservation-valider",
+    ),
+    path(
+        "businesses/<uuid:business_id>/reservations/<uuid:reservation_id>/annuler/",
+        ReservationCancelView.as_view(),
+        name="reservation-annuler",
+    ),
+    path(
+        "businesses/<uuid:business_id>/reservations/<uuid:reservation_id>/demarrer/",
+        ReservationStartView.as_view(),
+        name="reservation-demarrer",
+    ),
+    path(
+        "businesses/<uuid:business_id>/reservations/<uuid:reservation_id>/terminer/",
+        ReservationFinishView.as_view(),
+        name="reservation-terminer",
+    ),
+    # Public Business (V1)
+    path(
+        "public/b/<slug:slug>/",
+        PublicBusinessDetailView.as_view(),
+        name="public-business-detail",
+    ),
+    # Public Catalog (V1)
+    path(
+        "public/b/<slug:slug>/items/",
+        PublicCatalogView.as_view(),
+        name="public-catalog",
+    ),
+    path(
+        "public/b/<slug:slug>/categories/",
+        PublicCategoryListView.as_view(),
+        name="public-categories",
+    ),
+    path(
+        "public/b/<slug:slug>/items/<uuid:item_id>/availability/",
+        PublicAvailabilityView.as_view(),
+        name="public-availability",
+    ),
+    # Mémoire client : demande active / récupération (V2 mémoire)
+    path(
+        "public/b/<slug:slug>/active-request/",
+        PublicActiveRequestView.as_view(),
+        name="public-active-request",
+    ),
+    path(
+        "public/b/<slug:slug>/recover/",
+        PublicRecoverView.as_view(),
+        name="public-recover",
+    ),
+    path(
+        "public/b/<slug:slug>/customer-requests/",
+        PublicCustomerRequestsView.as_view(),
+        name="public-customer-requests",
+    ),
+    # Public Booking Requests (V2)
+    path(
+        "public/booking-requests/<str:token>/",
+        PublicBookingRequestByTokenView.as_view(),
+        name="public-booking-request-by-token",
+    ),
+    path(
+        "public/b/<slug:slug>/booking-requests/",
+        PublicBookingRequestCreateView.as_view(),
+        name="public-booking-request-create",
+    ),
+    path(
+        "public/b/<slug:slug>/booking-requests/<str:token>/",
+        PublicBookingRequestDetailView.as_view(),
+        name="public-booking-request-detail",
+    ),
+    path(
+        "public/b/<slug:slug>/booking-requests/<str:token>/cancel/",
+        PublicBookingRequestCancelView.as_view(),
+        name="public-booking-request-cancel",
+    ),
+    # V3: Client Counter-Proposal Response
+    path(
+        "public/b/<slug:slug>/booking-requests/<str:token>/accept-counter/",
+        PublicBookingRequestAcceptCounterView.as_view(),
+        name="public-booking-request-accept-counter",
+    ),
+    path(
+        "public/b/<slug:slug>/booking-requests/<str:token>/reject-counter/",
+        PublicBookingRequestRejectCounterView.as_view(),
+        name="public-booking-request-reject-counter",
+    ),
+    # Team Booking Requests (V2)
+    path(
+        "businesses/<uuid:business_id>/booking-requests/",
+        BookingRequestListView.as_view(),
+        name="booking-request-list",
+    ),
+    path(
+        "businesses/<uuid:business_id>/booking-requests/<uuid:request_id>/",
+        BookingRequestDetailView.as_view(),
+        name="booking-request-detail",
+    ),
+    path(
+        "businesses/<uuid:business_id>/booking-requests/<uuid:request_id>/action/",
+        BookingRequestActionView.as_view(),
+        name="booking-request-action",
+    ),
+    # V4 : Facturation
+    path(
+        "businesses/<uuid:business_id>/invoices/",
+        InvoiceListCreateView.as_view(),
+        name="invoice-list-create",
+    ),
+    path(
+        "businesses/<uuid:business_id>/invoices/<uuid:invoice_id>/",
+        InvoiceDetailView.as_view(),
+        name="invoice-detail",
+    ),
+    path(
+        "businesses/<uuid:business_id>/invoices/<uuid:invoice_id>/pdf/",
+        InvoicePDFView.as_view(),
+        name="invoice-pdf",
+    ),
+    path(
+        "businesses/<uuid:business_id>/invoices/<uuid:invoice_id>/mark-sent/",
+        InvoiceMarkSentView.as_view(),
+        name="invoice-mark-sent",
+    ),
+    path(
+        "businesses/<uuid:business_id>/invoices/<uuid:invoice_id>/mark-paid/",
+        InvoiceMarkPaidView.as_view(),
+        name="invoice-mark-paid",
+    ),
+    # Public Invoice (Client)
+    path(
+        "public/b/<slug:slug>/invoices/<uuid:reservation_id>/",
+        PublicInvoiceDetailView.as_view(),
+        name="public-invoice-detail",
+    ),
+    path(
+        "public/b/<slug:slug>/invoices/<uuid:reservation_id>/pdf/",
+        PublicInvoicePDFView.as_view(),
+        name="public-invoice-pdf",
+    ),
+    # Devices (Push Notifications)
+    path(
+        "devices/",
+        DeviceRegisterView.as_view(),
+        name="device-register",
+    ),
+    path(
+        "devices/<uuid:device_id>/",
+        DeviceUnregisterView.as_view(),
+        name="device-unregister",
+    ),
+]

@@ -1,0 +1,151 @@
+### Base URL
+@baseUrl = http://192.168.1.72:8000/api
+
+---
+
+### 1. INSCRIPTION (Registration)
+
+POST {{baseUrl}}/auth/register/
+Content-Type: application/json
+
+{
+  "email": "test@example.com",
+  "password": "motdepasse123",
+  "password2": "motdepasse123",
+  "first_name": "Jean",
+  "last_name": "Dupont"
+}
+
+---
+
+### 2. CONNEXION (Login)
+
+POST {{baseUrl}}/auth/login/
+Content-Type: application/json
+
+{
+  "email": "test@example.com",
+  "password": "motdepasse123"
+}
+
+---
+
+### 3. CONNEXION GOOGLE (Google Auth)
+
+POST {{baseUrl}}/auth/google/
+Content-Type: application/json
+
+{
+  "id_token": "GOOGLE_ID_TOKEN_FROM_MOBILE_APP"
+}
+
+---
+
+### 4. SESSION ACTUELLE (Me) — inclut le `slug` du business
+
+GET {{baseUrl}}/auth/me/
+Authorization: Bearer {{token}}
+
+---
+
+### 5. CRÉER UN BUSINESS
+
+POST {{baseUrl}}/businesses/
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "nom": "Mon Entreprise",
+  "business_type": "LOCATION_VEHICULES",
+  "adresse": "123 Rue de la Paix, 75001 Paris",
+  "telephone": "+33123456789",
+  "email": "contact@monentreprise.com"
+}
+
+---
+
+### 6. LIEN PUBLIC VITRINE (Client) — à partager
+
+GET {{baseUrl}}/public/b/{{slug}}/
+
+# Exemple avec slug réel:
+GET {{baseUrl}}/public/b/bluelight-even-5894c5/
+
+---
+
+### 7. CATALOGUE PUBLIC (Articles)
+
+GET {{baseUrl}}/public/b/{{slug}}/items/
+
+---
+
+### 8. DISPONIBILITÉ ARTICLE (Public)
+
+GET {{baseUrl}}/public/b/{{slug}}/items/{{item_id}}/availability/?date_debut=2026-09-01&date_fin=2026-09-05
+
+---
+
+### 9. CRÉER DEMANDE RÉSERVATION (Public)
+
+POST {{baseUrl}}/public/b/{{slug}}/booking-requests/
+Content-Type: application/json
+
+{
+  "item_id": "ITEM_UUID",
+  "date_debut": "2026-09-01",
+  "date_fin": "2026-09-05",
+  "quantite": 1,
+  "client_nom": "Client Test",
+  "client_email": "client@test.com",
+  "client_telephone": "+33612345678",
+  "motif": "Weekend"
+}
+
+---
+
+### 10. SUIVI DEMANDE PAR TOKEN (Public, sans slug)
+
+GET {{baseUrl}}/public/booking-requests/{{token}}/
+
+---
+
+### 11. LISTE RÉSERVATIONS (Team)
+
+GET {{baseUrl}}/businesses/{{business_id}}/reservations/
+Authorization: Bearer {{token}}
+
+---
+
+### 12. CRÉER FACTURE (Team)
+
+POST {{baseUrl}}/businesses/{{business_id}}/invoices/
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "reservation_id": "RESERVATION_UUID",
+  "type": "PROFORMA",
+  "tva_taux": "20.00"
+}
+
+---
+
+### 13. FACTURE PUBLIQUE (Client)
+
+GET {{baseUrl}}/public/b/{{slug}}/invoices/{{reservation_id}}/
+
+---
+
+### 14. PDF FACTURE PUBLIQUE
+
+GET {{baseUrl}}/public/b/{{slug}}/invoices/{{reservation_id}}/pdf/
+
+---
+
+### Variables à remplacer
+@token = VOTRE_ACCESS_TOKEN_ICI
+@business_id = UUID_DU_BUSINESS
+@slug = SLUG_DU_BUSINESS (ex: bluelight-even-5894c5)
+@item_id = UUID_DE_L_ARTICLE
+@reservation_id = UUID_DE_LA_RESERVATION
+@token = TOKEN_DE_LA_DEMANDE
