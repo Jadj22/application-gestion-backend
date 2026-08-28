@@ -6,15 +6,23 @@ Sprint 1 : Auth JWT + multi-tenant + RBAC.
 import os
 from datetime import timedelta
 from pathlib import Path
+import dj_database_url
 
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
-SECRET_KEY = os.getenv(
-    "DJANGO_SECRET_KEY", "django-insecure-ze4up^gkm&t=!f&g+a3t+#2kwh(fgxcsp$3_g_vr7*re=*et48"
-)
+# Cloudinary - stockage des fichiers médias
+CLOUDINARY_URL = os.getenv("CLOUDINARY_URL")
+
+if not CLOUDINARY_URL:
+    raise RuntimeError("CLOUDINARY_URL must be set")
+
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
+
+if not SECRET_KEY:
+    raise RuntimeError("DJANGO_SECRET_KEY must be set")
 
 DEBUG = os.getenv("DJANGO_DEBUG", "True") == "True"
 
@@ -22,8 +30,12 @@ DEBUG = os.getenv("DJANGO_DEBUG", "True") == "True"
 DJANGO_ENV = os.getenv("DJANGO_ENV", "production" if not DEBUG else "development")
 IS_PROD = DJANGO_ENV == "production"
 
-ALLOWED_HOSTS = [h.strip() for h in os.getenv("DJANGO_ALLOWED_HOSTS", "*").split(",")]
-ALLOWED_HOSTS = ["*"]
+
+ALLOWED_HOSTS = [
+    h.strip()
+    for h in os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
+    if h.strip()
+]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -36,10 +48,13 @@ INSTALLED_APPS = [
     "corsheaders",
     "drf_spectacular",
     "accounts",
+    "cloudinary",
+    "cloudinary_storage",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -73,20 +88,11 @@ TEMPLATES = [
 WSGI_APPLICATION = "config.wsgi.application"
 
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.getenv("DB_NAME", "app_gestion_db"),
-        "USER": os.getenv("DB_USER", "postgres"),
-        "PASSWORD": os.getenv("DB_PASSWORD", ""),
-        "HOST": os.getenv("DB_HOST", "127.0.0.1"),
-        "PORT": os.getenv("DB_PORT", "5432"),
-        # Connexions persistantes : sans cela Django rouvre une connexion à
-        # chaque requête HTTP (~58 ms mesurés au banc de charge, soit plus que
-        # le travail applicatif lui-même). CONN_HEALTH_CHECKS écarte les
-        # connexions coupées par le serveur avant de les réutiliser.
-        "CONN_MAX_AGE": int(os.getenv("DB_CONN_MAX_AGE", "60")),
-        "CONN_HEALTH_CHECKS": True,
-    }
+    "default": dj_database_url.config(
+        default=os.getenv("DATABASE_URL"),
+        conn_max_age=int(os.getenv("DB_CONN_MAX_AGE", "60")),
+        conn_health_checks=True,
+    )
 }
 
 AUTH_USER_MODEL = "accounts.User"
@@ -128,14 +134,27 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
 # Limites de taille de requête (S9) : payloads JSON raisonnables, photos
 # d'article jusqu'à 5 Mo (le plafond multipart = max des deux + marge).
 DATA_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = 6 * 1024 * 1024
 
 # Fichiers uploadés (photos d'articles, S 2-03)
-MEDIA_URL = "/media/"
-MEDIA_ROOT = BASE_DIR / "media"
+# MEDIA_URL = "/media/"
+# MEDIA_ROOT = BASE_DIR / "media"
+
+
+
+STORAGES = {
+    "default": {
+        "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -188,8 +207,21 @@ GOOGLE_CLIENT_IDS = [
     if c.strip()
 ]
 
-CORS_ALLOW_ALL_ORIGINS = os.getenv("CORS_ALLOW_ALL", "True") == "True"
-CORS_ALLOWED_ORIGINS = [o.strip() for o in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if o.strip()]
+CORS_ALLOW_ALL_ORIGINS = os.getenv("CORS_ALLOW_ALL", "False") == "True"
+
+CORS_ALLOWED_ORIGINS = [
+    o.strip()
+    for o in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")
+    if o.strip()
+]
+
+
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",")
+    if origin.strip()
+]
+
 CORS_ALLOW_HEADERS = [
     "accept",
     "authorization",
@@ -241,6 +273,7 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 # Sécurité transport (S9) : renforcée uniquement en production.
 if IS_PROD:
     SECURE_SSL_REDIRECT = os.getenv("DJANGO_SECURE_SSL_REDIRECT", "True") == "True"
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_HSTS_SECONDS = 31536000
