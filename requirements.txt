@@ -172,7 +172,7 @@ shellingham==1.5.4
 simplejwt==2.0.1
 six==1.17.0
 smart_open==7.6.0
-social-auth-app-django==5.7.0
+social-auth-app-django==5.4.0
 social-auth-core==4.8.3
 soupsieve==2.8.2
 spacy==3.8.11
