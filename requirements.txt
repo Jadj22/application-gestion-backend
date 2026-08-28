@@ -35,7 +35,7 @@ cloudpathlib==0.23.0
 colorama==0.4.6
 confection==0.1.5
 constantly==23.10.4
-cryptography==46.0.4
+cryptography==45.0.0
 cymem==2.0.13
 daphne==4.0.0
 defusedxml==0.7.1
