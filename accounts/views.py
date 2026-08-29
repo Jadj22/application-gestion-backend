@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
+from django.core.cache import cache
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.db.models import Count, Q
@@ -1609,7 +1610,9 @@ class TaskListCreateView(WriteThrottleMixin, APIView):
 
     def get(self, request, business_id):
         qs = request.business.maintenance_tasks.select_related(
-            "item", "assigned_to", "assigned_by", "created_by"
+            "item", "item__category", "assigned_to", "assigned_by", "created_by"
+        ).prefetch_related(
+            "steps", "steps__photos", "steps__done_by", "comments", "comments__auteur"
         ).order_by("-created_at", "-id")
         item_id = request.query_params.get("item_id")
         if item_id:
@@ -3045,13 +3048,14 @@ class PublicCatalogView(APIView):
             is_published=True, statut=Item.Statut.ACTIF
         ).select_related("category").prefetch_related("photos")
 
-        # Pagination intelligente côté serveur si page/page_size demandés
+        # Pagination intelligente côté serveur si page/page_size demandés (évite OOM)
+        from .pagination import PublicCatalogPagination
         page_param = request.query_params.get("page")
         page_size_param = request.query_params.get("page_size")
 
         if not has_dates:
             if page_param is not None or page_size_param is not None:
-                paginator = StandardPagination()
+                paginator = PublicCatalogPagination()
                 if page_size_param:
                     try:
                         paginator.page_size = min(int(page_size_param), paginator.max_page_size)
@@ -3067,11 +3071,11 @@ class PublicCatalogView(APIView):
             )
             return Response(serializer.data)
 
-        # Option B : calculer dispo pour chaque article sur la période
+        # Option B : calculer dispo pour chaque article sur la période — optimisé N+1 -> 5 requêtes
         from django.db.models import Q, Sum
         from datetime import date
-        from .stock import snapshot
-        from .maintenance import etat_entretien
+        from .stock import get_aggregates, get_adjustments, snapshot
+        from .maintenance import etats_entretien
 
         try:
             date_debut = date.fromisoformat(date_debut)
@@ -3088,36 +3092,55 @@ class PublicCatalogView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        results = []
-        for item in items:
-            stock = snapshot(item)
-            total = stock["total"]
-            disponibles = stock["disponibles"]
+        # Cache 2min pour le mode disponibilité (clé par business+dates+page)
+        cache_key = f"pub_catalog:{business.id}:{date_debut}:{date_fin}:{request.query_params.get('page')}:{request.query_params.get('page_size')}"
+        if cached := cache.get(cache_key):
+            return Response(cached)
 
-            # Réservations actives chevauchantes
-            reserves_qs = item.reservations.exclude(
+        items = list(items)  # évalue le queryset une fois avec select_related/prefetch déjà appliqués
+        if not items:
+            return Response([])
+
+        item_ids = [i.id for i in items]
+        # Batch stock & entretien (3 requêtes au lieu de 2N)
+        aggregates = get_aggregates(business.id, item_ids)
+        adjustments = get_adjustments(business.id, item_ids)
+        etats = etats_entretien(items)
+
+        # Réservations & BookingRequests chevauchantes groupées (2 requêtes)
+        reserves_map = {
+            r["item_id"]: r["total"]
+            for r in business.reservations.exclude(
                 statut__in=[Reservation.Statut.TERMINEE, Reservation.Statut.ANNULEE]
             ).filter(
-                Q(date_debut__lte=date_fin) & Q(date_fin__gte=date_debut)
-            )
-            reserves_pendant = reserves_qs.aggregate(total=Sum("quantite"))["total"] or 0
-
-            # Booking Requests en attente/acceptees chevauchantes (V2)
-            from .models import BookingRequest
-            br_qs = item.booking_requests.filter(
-                statut__in=[BookingRequest.Statut.EN_ATTENTE, BookingRequest.Statut.ACCEPTEE]
+                Q(date_debut__lte=date_fin) & Q(date_fin__gte=date_debut),
+                item_id__in=item_ids,
+            ).values("item_id").annotate(total=Sum("quantite"))
+        }
+        from .models import BookingRequest
+        br_map = {
+            r["item_id"]: r["total"]
+            for r in BookingRequest.objects.filter(
+                business=business,
+                statut__in=[BookingRequest.Statut.EN_ATTENTE, BookingRequest.Statut.ACCEPTEE],
+                item_id__in=item_ids,
             ).filter(
                 Q(date_debut__lte=date_fin) & Q(date_fin__gte=date_debut)
-            )
-            br_pendant = br_qs.aggregate(total=Sum("quantite"))["total"] or 0
+            ).values("item_id").annotate(total=Sum("quantite"))
+        }
 
-            # Articles en entretien (pas dispo)
-            etat = etat_entretien(item)
+        results = []
+        # Pré-sérialisation bulk pour éviter N+1 photo_url
+        bulk_data = {d["id"]: d for d in PublicItemSerializer(items, many=True, context={"request": request}).data}
+        for item in items:
+            stock = snapshot(item, aggregates, adjustments)
+            total = stock["total"]
+            reserves_pendant = reserves_map.get(item.id, 0)
+            br_pendant = br_map.get(item.id, 0)
+            etat = etats.get(item.id, {"code": "PRET"})
             en_entretien = 1 if etat["code"] in ("EN_ENTRETIEN", "PARTIEL") else 0
-
             dispo_periode = max(total - reserves_pendant - br_pendant - en_entretien, 0)
-
-            base = PublicItemSerializer(item, context={"request": request}).data
+            base = bulk_data[str(item.id)]
             base.update({
                 "total_stock": total,
                 "disponible": dispo_periode,
@@ -3130,14 +3153,18 @@ class PublicCatalogView(APIView):
 
         # Pagination intelligente pour le mode disponibilité aussi
         if page_param is not None or page_size_param is not None:
-            paginator = StandardPagination()
+            from .pagination import PublicCatalogPagination as _PCP
+            paginator = _PCP()
             if page_size_param:
                 try:
                     paginator.page_size = min(int(page_size_param), paginator.max_page_size)
                 except ValueError:
                     pass
             page_results = paginator.paginate_queryset(results, request)
-            return paginator.get_paginated_response(page_results)
+            resp = paginator.get_paginated_response(page_results)
+            cache.set(cache_key, resp.data, 120)
+            return resp
+        cache.set(cache_key, results, 120)
         return Response(results)
 
 
@@ -3158,7 +3185,7 @@ class PublicCategoryListView(APIView):
                 {"detail": "Business introuvable."},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        categories = business.categories.all().order_by("nom")
+        categories = business.categories.annotate(item_count=Count("items")).order_by("nom")
         serializer = PublicCategorySerializer(
             categories, many=True, context={"request": request}
         )

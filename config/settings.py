@@ -55,6 +55,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
+    "django.middleware.gzip.GZipMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -87,13 +88,39 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 
+# Redis (optionnel) : cache public catalog + stock. REDIS_URL=redis://... sur Render
+REDIS_URL = os.getenv("REDIS_URL", "")
+
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache" if REDIS_URL else "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": REDIS_URL or "unique-snowflake",
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient" if REDIS_URL else "",
+            "IGNORE_EXCEPTIONS": True,  # degrade gracieusement si Redis down
+        },
+        "KEY_PREFIX": "dodome",
+        "TIMEOUT": 120,
+    }
+} if REDIS_URL else {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "unique-snowflake",
+    }
+}
+
 DATABASES = {
     "default": dj_database_url.config(
         default=os.getenv("DATABASE_URL"),
-        conn_max_age=int(os.getenv("DB_CONN_MAX_AGE", "60")),
+        # Pooling: Render PgBouncer recommandé (DATABASE_URL pooled). Avec pgbouncer, CONN_MAX_AGE=0
+        # Sans pgbouncer, 60s réutilise la connexion par worker.
+        conn_max_age=int(os.getenv("DB_CONN_MAX_AGE", "0" if "pooler" in os.getenv("DATABASE_URL", "") else "60")),
         conn_health_checks=True,
     )
 }
+# Pool local si pas de pgbouncer externe (ex: pgbouncer sidecar)
+if not REDIS_URL and "pooler" not in os.getenv("DATABASE_URL", ""):
+    DATABASES["default"]["CONN_MAX_AGE"] = int(os.getenv("DB_CONN_MAX_AGE", "60"))
 
 AUTH_USER_MODEL = "accounts.User"
 

@@ -10,9 +10,15 @@ from rest_framework.pagination import PageNumberPagination
 
 
 class StandardPagination(PageNumberPagination):
-    page_size = 100
+    page_size = 20
     page_size_query_param = "page_size"
-    max_page_size = 1000
+    max_page_size = 50
+
+
+class PublicCatalogPagination(StandardPagination):
+    """Pagination allégée pour le catalogue public (snapshot coûteux)."""
+    page_size = 12
+    max_page_size = 50
 
 
 def paginated(_request, queryset, serializer, **context):
