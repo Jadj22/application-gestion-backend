@@ -988,7 +988,7 @@ class CategoryListCreateView(WriteThrottleMixin, APIView):
         return [HasBusinessPermission.require(Perm.CATALOG_VIEW)()]
 
     def get(self, request, business_id):
-        qs = request.business.categories.annotate(item_count=Count("items"))
+        qs = request.business.categories.annotate(item_count=Count("items")).order_by("nom")
         search = request.query_params.get("search")
         if search:
             qs = qs.filter(nom__icontains=search)

@@ -15,10 +15,10 @@ class StandardPagination(PageNumberPagination):
     max_page_size = 1000
 
 
-def paginated(request, queryset, serializer, **context):
+def paginated(_request, queryset, serializer, **context):
     """Sérialise la page courante de `queryset` avec l'enveloppe standard."""
     paginator = StandardPagination()
-    page = paginator.paginate_queryset(queryset, request)
+    page = paginator.paginate_queryset(queryset, _request)
     return paginator.get_paginated_response(
         serializer(page, many=True, context=context).data
     )

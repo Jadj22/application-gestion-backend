@@ -315,13 +315,9 @@ class PermissionSerializer(serializers.ModelSerializer):
 
 class CategorySerializer(serializers.ModelSerializer):
     item_count = serializers.SerializerMethodField()
-    parent_id = serializers.UUIDField(
-        source="parent", required=False, allow_null=True
-    )
+    parent_id = serializers.UUIDField(required=False, allow_null=True)
     entretien_requis = serializers.BooleanField(required=False, allow_null=True)
-    procedure_id = serializers.UUIDField(
-        source="procedure", required=False, allow_null=True
-    )
+    procedure_id = serializers.UUIDField(required=False, allow_null=True)
     image = serializers.ImageField(required=False, allow_null=True)
     image_url = serializers.SerializerMethodField()
 
@@ -357,13 +353,14 @@ class CategorySerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Cette catégorie existe déjà.")
         return value
 
-    def validate_parent(self, value):
+    def validate_parent_id(self, value):
         if value is None:
             return value
         business = self.context["business"]
-        if value.business_id != business.id:
+        parent = Category.objects.filter(id=value, business=business).first()
+        if parent is None:
             raise serializers.ValidationError("Catégorie parente invalide pour ce business.")
-        if self.instance is not None and value.id == self.instance.id:
+        if self.instance is not None and parent.id == self.instance.id:
             raise serializers.ValidationError("Une catégorie ne peut pas être son propre parent.")
         return value
 
@@ -371,10 +368,9 @@ class CategorySerializer(serializers.ModelSerializer):
         if value is None:
             return None
         business = self.context["business"]
-        procedure = Procedure.objects.filter(id=value, business=business).first()
-        if procedure is None:
+        if not Procedure.objects.filter(id=value, business=business).exists():
             raise serializers.ValidationError("Procédure invalide pour ce business.")
-        return procedure
+        return value
 
 
 class PublicCategorySerializer(serializers.ModelSerializer):
