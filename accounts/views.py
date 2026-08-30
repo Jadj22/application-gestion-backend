@@ -4,7 +4,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.cache import cache
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Case, Count, Q, Value, FloatField
 from django.utils import timezone
 from rest_framework import serializers, status
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -43,6 +43,7 @@ from .models import (
     TaskStepPhoto,
 )
 from .permissions import HasBusinessPermission, IsSelfMember, get_membership
+from .search.intent_analyzer import SearchIntentAnalyzer
 from .rbac import PERMISSIONS_CATALOG, Perm, RoleNom, seed_default_roles
 from .serializers import (
     ActivityLogSerializer,
@@ -3166,6 +3167,166 @@ class PublicCatalogView(APIView):
             return resp
         cache.set(cache_key, results, 120)
         return Response(results)
+
+
+class PublicSearchView(APIView):
+    """Recherche intelligente sur le catalogue public d'un business.
+
+    GET /api/public/b/<slug>/search/
+    Paramètres :
+    - q: requête utilisateur en langage naturel
+    - date_debut / date_fin: dates optionnelles pour filtre de disponibilité
+    - category: UUID de catégorie (optionnel)
+    - page / page_size: pagination
+    """
+
+    permission_classes = [AllowAny]
+    serializer_class = PublicItemSerializer
+
+    def get(self, request, slug):
+        from .search.search_service import SearchService
+        from .pagination import PublicCatalogPagination
+        from datetime import date as dt_date
+
+        business = Business.objects.filter(slug=slug).first()
+        if business is None:
+            return Response(
+                {"detail": "Business introuvable."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        query = request.query_params.get("q", "").strip()
+        category_id = request.query_params.get("category")
+        date_debut_str = request.query_params.get("date_debut")
+        date_fin_str = request.query_params.get("date_fin")
+
+        date_debut, date_fin = None, None
+        if date_debut_str or date_fin_str:
+            if not date_debut_str or not date_fin_str:
+                return Response(
+                    {"detail": "date_debut et date_fin doivent être fournis ensemble."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            try:
+                date_debut = dt_date.fromisoformat(date_debut_str)
+                date_fin = dt_date.fromisoformat(date_fin_str)
+            except ValueError:
+                return Response(
+                    {"detail": "Format de date invalide (YYYY-MM-DD)."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if date_fin < date_debut:
+                return Response(
+                    {"detail": "date_fin doit être >= date_debut."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        # Exécuter la recherche orchestrée
+        search_res = SearchService.execute_search(
+            business=business,
+            query=query,
+            category_id=category_id,
+            date_debut=date_debut,
+            date_fin=date_fin,
+        )
+
+        ranked_results = search_res["ranked_results"]
+        stock_map = search_res["stock_map"]
+        intent_data = search_res["intent_data"]
+
+        # Pagination
+        paginator = PublicCatalogPagination()
+        page_size_param = request.query_params.get("page_size")
+        if page_size_param:
+            try:
+                paginator.page_size = min(int(page_size_param), paginator.max_page_size)
+            except ValueError:
+                pass
+
+        page_items = paginator.paginate_queryset(ranked_results, request)
+        items_only = [r["item"] for r in page_items]
+        serializer = PublicItemSerializer(items_only, many=True, context={"request": request})
+
+        # Enrichir chaque résultat avec score, match_reasons et stock_info
+        serialized_results = []
+        for ranked_entry, item_data in zip(page_items, serializer.data):
+            entry_id = str(ranked_entry["item"].id)
+            enriched = dict(item_data)
+            enriched["score"] = ranked_entry["score"]
+            enriched["match_reasons"] = ranked_entry["match_reasons"]
+            if entry_id in stock_map:
+                enriched.update(stock_map[entry_id])
+            serialized_results.append(enriched)
+
+        response_data = paginator.get_paginated_response(serialized_results).data
+        response_data["metadata"] = {
+            "query": query,
+            "intent": intent_data.get("intent"),
+            "event": intent_data.get("event"),
+            "target": intent_data.get("target"),
+            "attendees": intent_data.get("attendees"),
+            "location": intent_data.get("location"),
+        }
+
+        return Response(response_data)
+
+
+class PublicItemRecommendationsView(APIView):
+    """Recommandations d'articles pour une fiche article donnée.
+
+    GET /api/public/b/<slug>/items/{id}/recommendations/
+    Paramètres :
+    - type: similar | complementary | used_for | often_rented_together (default: complementary)
+    - limit: nombre de résultats (default: 4, max: 12)
+    """
+
+    permission_classes = [AllowAny]
+    serializer_class = PublicItemSerializer
+
+    def get(self, request, slug, item_id):
+        from .search.recommendation_engine import RecommendationEngine
+
+        business = Business.objects.filter(slug=slug).first()
+        if business is None:
+            return Response(
+                {"detail": "Business introuvable."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        item = business.items.filter(
+            id=item_id, is_published=True, statut=Item.Statut.ACTIF
+        ).select_related("category").first()
+        if item is None:
+            return Response(
+                {"detail": "Article introuvable ou n'appartient pas à ce business."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        rec_type = request.query_params.get("type", "complementary")
+        try:
+            limit = max(1, min(int(request.query_params.get("limit", "4")), 12))
+        except ValueError:
+            limit = 4
+
+        rec_result = RecommendationEngine.get_recommendations(
+            target_item=item,
+            rec_type=rec_type,
+            limit=limit,
+        )
+
+        serializer = PublicItemSerializer(
+            rec_result["items"], many=True, context={"request": request}
+        )
+
+        return Response({
+            "item": {
+                "id": str(item.id),
+                "nom": item.nom,
+            },
+            "type": rec_result["type"],
+            "default_reason": rec_result["default_reason"],
+            "recommendations": serializer.data,
+        })
 
 
 class PublicCategoryListView(APIView):

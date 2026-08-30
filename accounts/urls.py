@@ -19,6 +19,8 @@ from .views import (
     CategoryListCreateView,
     DashboardView,
     DecisionsListView,
+    DeviceRegisterView,
+    DeviceUnregisterView,
     GoogleAuthView,
     HistoryView,
     ImageDescriptionView,
@@ -30,6 +32,11 @@ from .views import (
     InvitationAcceptView,
     InvitationPreviewView,
     InvitationValidateView,
+    InvoiceDetailView,
+    InvoiceListCreateView,
+    InvoiceMarkPaidView,
+    InvoiceMarkSentView,
+    InvoicePDFView,
     ItemDetailView,
     ItemListCreateView,
     ItemPhotoView,
@@ -50,18 +57,20 @@ from .views import (
     PublicActiveRequestView,
     PublicAvailabilityView,
     PublicBookingRequestAcceptCounterView,
+    PublicBookingRequestByTokenView,
     PublicBookingRequestCancelView,
     PublicBookingRequestCreateView,
     PublicBookingRequestDetailView,
     PublicBookingRequestRejectCounterView,
-    PublicBookingRequestByTokenView,
     PublicBusinessDetailView,
-    PublicCategoryListView,
     PublicCatalogView,
+    PublicCategoryListView,
     PublicCustomerRequestsView,
-    PublicRecoverView,
     PublicInvoiceDetailView,
     PublicInvoicePDFView,
+    PublicItemRecommendationsView,
+    PublicRecoverView,
+    PublicSearchView,
     RecurringTaskDetailView,
     RecurringTaskListCreateView,
     RefreshView,
@@ -83,23 +92,15 @@ from .views import (
     TaskClotureView,
     TaskCommentDetailView,
     TaskCommentListCreateView,
-TaskDetailView,
+    TaskDetailView,
     TaskListCreateView,
     TaskStepPhotoDeleteView,
     TaskStepPhotoListCreateView,
     TaskStepUpdateView,
-    InvoiceDetailView,
-    InvoiceListCreateView,
-    InvoicePDFView,
-    InvoiceMarkSentView,
-    InvoiceMarkPaidView,
-    DeviceRegisterView,
-    DeviceUnregisterView,
 )
 
 urlpatterns = [
-    # Offline-First : sonde d'accessibilite du backend. C'est cette route, et
-    # pas l'etat du Wi-Fi, qui fait basculer l'application en mode ONLINE.
+    # Offline-First : sonde d'accessibilité du backend.
     path("health/", health, name="health"),
     # Aide a la saisie d'un article : generation IA a partir d'un texte
     # (sans photo). L'analyse d'image reste sur ai/image-description/.
@@ -460,6 +461,18 @@ urlpatterns = [
         "public/b/<slug:slug>/items/",
         PublicCatalogView.as_view(),
         name="public-catalog",
+    ),
+    # Smart Search (V1)
+    path(
+        "public/b/<slug:slug>/search/",
+        PublicSearchView.as_view(),
+        name="public-search",
+    ),
+    # Recommendations (V1)
+    path(
+        "public/b/<slug:slug>/items/<uuid:item_id>/recommendations/",
+        PublicItemRecommendationsView.as_view(),
+        name="public-item-recommendations",
     ),
     path(
         "public/b/<slug:slug>/categories/",
