@@ -36,6 +36,7 @@ urlpatterns = [
     path(".well-known/assetlinks.json", assetlinks),
     path("admin/", admin.site.urls),
     path("api/", include("accounts.urls")),
+    path("", include("accounts.urls")),
     path(
         "api/schema/",
         SpectacularAPIView.as_view(),
