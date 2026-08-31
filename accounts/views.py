@@ -1,3 +1,5 @@
+import logging
+
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
@@ -149,6 +151,8 @@ from .stock import create_movement, get_adjustments, get_aggregates, snapshot
 
 User = get_user_model()
 
+logger = logging.getLogger(__name__)
+
 
 def _tokens_for(user):
     refresh = RefreshToken.for_user(user)
@@ -240,11 +244,13 @@ class GoogleAuthView(AuthThrottleMixin, APIView):
         try:
             info = _verify_google_id_token(serializer.validated_data["id_token"])
         except ValueError as exc:
+            logger.warning("AUTH GOOGLE — token invalide: %s", exc)
             return Response({"detail": str(exc)}, status=status.HTTP_401_UNAUTHORIZED)
 
         sub = info["sub"]
         email = (info.get("email") or "").lower()
         if not email:
+            logger.warning("AUTH GOOGLE — sub=%s sans email", sub)
             return Response(
                 {"detail": "Le compte Google n'a pas d'adresse email."},
                 status=status.HTTP_401_UNAUTHORIZED,
@@ -252,11 +258,14 @@ class GoogleAuthView(AuthThrottleMixin, APIView):
 
         with transaction.atomic():
             user = User.objects.filter(google_sub=sub).first()
+            matched_by = "google_sub"
             if user is None:
                 user = User.objects.filter(email=email).first()
+                matched_by = "email"
             is_new = user is None
             if is_new:
                 user = User(username=email, email=email, statut=User.Statut.ACTIF)
+                matched_by = "created"
             user.google_sub = sub
             user.first_name = (info.get("given_name") or user.first_name or "")[:150]
             user.last_name = (info.get("family_name") or user.last_name or "")[:150]
@@ -264,10 +273,19 @@ class GoogleAuthView(AuthThrottleMixin, APIView):
                 user.set_unusable_password()
             user.save()
 
+        logger.info(
+            "AUTH GOOGLE — user_id=%s email=%s matched_by=%s is_new=%s",
+            user.id,
+            user.email,
+            matched_by,
+            is_new,
+        )
+
         return Response(
             {"user": UserSerializer(user).data, **_tokens_for(user)},
             status=status.HTTP_200_OK,
         )
+
 
 
 def _verify_google_id_token(token):
@@ -357,6 +375,73 @@ class BusinessListCreateView(WriteThrottleMixin, APIView):
             cible=business.nom,
         )
         return Response(BusinessSerializer(business).data, status=status.HTTP_201_CREATED)
+
+
+class BusinessContextView(APIView):
+    """Retourne le contexte RBAC complet pour le business courant (X-Business-ID).
+
+    GET /api/businesses/current/context/
+
+    Nécessite :
+      - JWT valide (Authorization: Bearer <access>)
+      - Header X-Business-ID avec l'UUID d'un business dont l'utilisateur est
+        membre ACTIF.
+
+    Réponse :
+      {
+        "business": { "id", "nom", "business_type", "slug" },
+        "membership": { "id", "statut" },
+        "role": { "id", "nom", "is_system" } | null,
+        "permissions": ["codename1", ...]
+      }
+    """
+
+    permission_classes = [HasBusinessPermission]
+
+    def get(self, request, **kwargs):
+        membership = request.membership
+        business = request.business
+        role = membership.role
+        permissions = (
+            list(role.permissions.values_list("codename", flat=True))
+            if role is not None
+            else []
+        )
+
+        logger.info(
+            "AUTH CONTEXT — user_id=%s email=%s business_id=%s membership_id=%s role=%s statut=%s",
+            request.user.id,
+            request.user.email,
+            business.id,
+            membership.id,
+            role.nom if role else None,
+            membership.statut,
+        )
+
+        return Response(
+            {
+                "business": {
+                    "id": str(business.id),
+                    "nom": business.nom,
+                    "slug": business.slug,
+                    "business_type": business.business_type,
+                },
+                "membership": {
+                    "id": str(membership.id),
+                    "statut": membership.statut,
+                },
+                "role": (
+                    {
+                        "id": str(role.id),
+                        "nom": role.nom,
+                        "is_system": role.is_system,
+                    }
+                    if role is not None
+                    else None
+                ),
+                "permissions": permissions,
+            }
+        )
 
 
 # --- Membres (US-02, US-03) ------------------------------------------------

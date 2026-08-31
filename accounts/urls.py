@@ -11,6 +11,7 @@ from .views import (
     BookingRequestActionView,
     BookingRequestDetailView,
     BookingRequestListView,
+    BusinessContextView,
     BusinessListCreateView,
     BusinessMembersView,
     BusinessRolesView,
@@ -118,6 +119,13 @@ urlpatterns = [
     # Businesses (US-01)
     path("business-types/", BusinessTypeListView.as_view(), name="business-types"),
     path("businesses/", BusinessListCreateView.as_view(), name="business-list-create"),
+    # Contexte RBAC du business courant — RM-01, RM-19
+    # DOIT être AVANT <uuid:business_id> pour éviter d'être capturé par ce pattern.
+    path(
+        "businesses/current/context/",
+        BusinessContextView.as_view(),
+        name="business-context",
+    ),
     # Rôles & permissions (US-04, RM-19)
     path(
         "businesses/<uuid:business_id>/roles/",

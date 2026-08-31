@@ -1,5 +1,6 @@
 ### Base URL
 @baseUrl = http://192.168.1.72:8000/api
+@id=048bde6e-371b-464c-a4e0-ea920f2389fa
 
 ---
 
@@ -15,6 +16,10 @@ Content-Type: application/json
   "first_name": "Jean",
   "last_name": "Dupont"
 }
+
+
+####
+GET https://dodome-backend.onrender.com/api/public/b/bleulight-event-3e88f4/items/048bde6e-371b-464c-a4e0-ea920f2389fa/recommendations/?type=complementary
 
 ---
 
