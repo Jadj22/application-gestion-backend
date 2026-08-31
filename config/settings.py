@@ -229,7 +229,9 @@ GOOGLE_CLIENT_IDS = [
     for c in os.getenv(
         "GOOGLE_CLIENT_IDS",
         "976579848816-0snvj73v3bhvh28prtmaqhn8rqlfleik.apps.googleusercontent.com,"
-        "976579848816-gfq0r9uecquhjbictks7m6cffgqtm1gs.apps.googleusercontent.com",
+        "976579848816-gfq0r9uecquhjbictks7m6cffgqtm1gs.apps.googleusercontent.com,"
+        "976579848816-e598kpiel6eict62066bdi7jut75nbmb.apps.googleusercontent.com,"
+        "786231345880-61viiam43rsiqmb5o4rjeut03jcn6e1t.apps.googleusercontent.com",
     ).split(",")
     if c.strip()
 ]
