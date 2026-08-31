@@ -236,18 +236,25 @@ GOOGLE_CLIENT_IDS = [
     if c.strip()
 ]
 
-CORS_ALLOW_ALL_ORIGINS = os.getenv("CORS_ALLOW_ALL", "False") == "True"
+CORS_ALLOW_ALL_ORIGINS = os.getenv("CORS_ALLOW_ALL", "True") == "True"
 
 CORS_ALLOWED_ORIGINS = [
     o.strip()
-    for o in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")
+    for o in os.getenv(
+        "CORS_ALLOWED_ORIGINS",
+        "http://localhost:3000,http://127.0.0.1:3000,http://172.26.224.1:3000,https://jadj22-dashboard-admin-dodome.vercel.app,https://app.dodome.app",
+    ).split(",")
     if o.strip()
 ]
 
+CORS_ALLOW_CREDENTIALS = True
 
 CSRF_TRUSTED_ORIGINS = [
     origin.strip()
-    for origin in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",")
+    for origin in os.getenv(
+        "CSRF_TRUSTED_ORIGINS",
+        "http://localhost:3000,http://127.0.0.1:3000,https://application-gestion-backend.onrender.com,https://dodome-backend.onrender.com,https://jadj22-dashboard-admin-dodome.vercel.app,https://app.dodome.app",
+    ).split(",")
     if origin.strip()
 ]
 
