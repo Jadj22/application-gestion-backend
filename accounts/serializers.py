@@ -70,6 +70,9 @@ class RegisterSerializer(serializers.ModelSerializer):
             "last_name": {"required": False, "allow_blank": True},
         }
 
+    def validate_email(self, value):
+        return value.strip().lower()
+
     def create(self, validated_data):
         password = validated_data.pop("password")
         email = validated_data["email"]
@@ -83,7 +86,16 @@ class LoginSerializer(TokenObtainPairSerializer):
     """JWT + infos utilisateur dans la réponse de connexion."""
 
     def validate(self, attrs):
+        username_field = get_user_model().USERNAME_FIELD
+        if username_field in attrs and isinstance(attrs[username_field], str):
+            attrs[username_field] = attrs[username_field].strip().lower()
         data = super().validate(attrs)
+        if self.user and getattr(self.user, "statut", None) == User.Statut.INACTIF:
+            from rest_framework.exceptions import AuthenticationFailed
+            raise AuthenticationFailed(
+                self.error_messages["no_active_account"],
+                "no_active_account",
+            )
         data["user"] = UserSerializer(self.user).data
         return data
 

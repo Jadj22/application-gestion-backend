@@ -265,11 +265,12 @@ class GoogleAuthView(AuthThrottleMixin, APIView):
             is_new = user is None
             if is_new:
                 user = User(username=email, email=email, statut=User.Statut.ACTIF)
+                user.set_unusable_password()
                 matched_by = "created"
             user.google_sub = sub
             user.first_name = (info.get("given_name") or user.first_name or "")[:150]
             user.last_name = (info.get("family_name") or user.last_name or "")[:150]
-            if not user.has_usable_password():
+            if not user.password:
                 user.set_unusable_password()
             user.save()
 
