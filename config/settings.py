@@ -33,7 +33,10 @@ IS_PROD = DJANGO_ENV == "production"
 
 ALLOWED_HOSTS = [
     h.strip()
-    for h in os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
+    for h in os.getenv(
+        "DJANGO_ALLOWED_HOSTS",
+        "localhost,127.0.0.1,192.168.1.72,application-gestion-backend.onrender.com,.onrender.com",
+    ).split(",")
     if h.strip()
 ]
 
@@ -242,7 +245,7 @@ CORS_ALLOWED_ORIGINS = [
     o.strip()
     for o in os.getenv(
         "CORS_ALLOWED_ORIGINS",
-        "http://localhost:3000,http://127.0.0.1:3000,http://172.26.224.1:3000,https://jadj22-dashboard-admin-dodome.vercel.app,https://app.dodome.app",
+        "http://localhost:3000,http://127.0.0.1:3000,http://172.26.224.1:3000,https://jadj22-dashboard-admin-dodome.vercel.app,https://app.dodome.app,http://192.168.1.72:8000",
     ).split(",")
     if o.strip()
 ]
