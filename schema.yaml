@@ -1,0 +1,6865 @@
+openapi: 3.0.3
+info:
+  title: API Gestion d'équipement multi-tenant
+  version: 1.0.0
+  description: 'Backend Django multi-tenant : auth JWT, catalogue, stock & traçabilité,
+    entretien, fiabilité, alertes métier, activités, notifications et réservations.
+    Toutes les listes GET renvoient l''enveloppe paginée {count, next, previous, results}.'
+paths:
+  /api/ai/image-description/:
+    post:
+      operationId: ai_image_description_create
+      description: |-
+        Analyse d'une photo d'article par Gemini (Sprint 10).
+
+        Renvoie {"nom": ..., "description": ...} pour pré-remplir le formulaire
+        de création d'article quand l'utilisateur ne connaît pas l'article.
+        La clé Gemini reste côté serveur (settings.GEMINI_API_KEY).
+      tags:
+      - ai
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImageDescriptionRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ImageDescriptionRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ImageDescriptionRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImageDescription'
+          description: ''
+  /api/ai/item-description/:
+    post:
+      operationId: ai_item_description_create
+      description: |-
+        `POST /ai/item-description/` — génère une fiche article sans photo.
+
+        Pendant textuel de l'analyse d'image : même forme de réponse, donc
+        l'application traite les propositions de la même façon quelle que soit la
+        source choisie par l'utilisateur.
+      tags:
+      - ai
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ItemDescriptionRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ItemDescriptionRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ItemDescriptionRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemDescription'
+          description: ''
+  /api/auth/google/:
+    post:
+      operationId: auth_google_create
+      description: |-
+        Connexion par ID token Google (S 1-02, OAuth 2.0 mobile).
+
+        L'app Android envoie l'ID token obtenu via google_sign_in ; le token est
+        vérifié (signature, émetteur, audience) puis un utilisateur local est
+        trouvé ou créé (google_sub) et lié à l'email Google si le compte existe
+        déjà. Réponse identique à /auth/login/ : {user, access, refresh}.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GoogleAuthRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/GoogleAuthRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/GoogleAuthRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoogleAuth'
+          description: ''
+  /api/auth/login/:
+    post:
+      operationId: auth_login_create
+      description: Scope de throttling commun aux endpoints d'authentification (S9).
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+        required: true
+      responses:
+        '200':
+          description: No response body
+  /api/auth/me/:
+    get:
+      operationId: auth_me_retrieve
+      tags:
+      - auth
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+    delete:
+      operationId: auth_me_destroy
+      description: Suppression définitive du compte authentifié (RGPD / profil).
+      tags:
+      - auth
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/auth/refresh/:
+    post:
+      operationId: auth_refresh_create
+      description: Scope de throttling commun aux endpoints d'authentification (S9).
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenRefresh'
+          description: ''
+  /api/auth/register/:
+    post:
+      operationId: auth_register_create
+      description: Scope de throttling commun aux endpoints d'authentification (S9).
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterResponse'
+          description: ''
+  /api/business-types/:
+    get:
+      operationId: business_types_retrieve
+      description: |-
+        Liste fermée des types de business (étape 1 du tunnel d'onboarding).
+        Catalogue statique : accessible sans authentification.
+      tags:
+      - business-types
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessType'
+          description: ''
+  /api/businesses/:
+    get:
+      operationId: businesses_retrieve
+      description: Scope de throttling commun aux mutations (créations / actions,
+        S9).
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Business'
+          description: ''
+    post:
+      operationId: businesses_create
+      description: Scope de throttling commun aux mutations (créations / actions,
+        S9).
+      tags:
+      - businesses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BusinessRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BusinessRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BusinessRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Business'
+          description: ''
+  /api/businesses/{business_id}/activities/:
+    get:
+      operationId: businesses_activities_retrieve
+      description: Flux d'activité de l'équipe (US-27, RM-20). Journaux immuables.
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivityLog'
+          description: ''
+  /api/businesses/{business_id}/adjustments/:
+    get:
+      operationId: businesses_adjustments_retrieve
+      description: 'Ajustements : liste filtrable (US-26) + ajustement manuel (US-24).'
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockAdjustment'
+          description: ''
+    post:
+      operationId: businesses_adjustments_create
+      description: 'Ajustements : liste filtrable (US-26) + ajustement manuel (US-24).'
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockAdjustment'
+          description: ''
+  /api/businesses/{business_id}/alerts/:
+    get:
+      operationId: businesses_alerts_retrieve
+      description: 'Alertes émises (US-19). Immuables : le problème reste visible.'
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Alert'
+          description: ''
+  /api/businesses/{business_id}/analytics/:
+    get:
+      operationId: businesses_analytics_retrieve
+      description: Statistiques avancées pour le dashboard.
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/businesses/{business_id}/booking-requests/:
+    get:
+      operationId: businesses_booking_requests_retrieve
+      description: |-
+        Liste des demandes pour l'équipe (filtres statut, dates).
+
+        GET /api/businesses/<uuid:business_id>/booking-requests/
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingRequestTeam'
+          description: ''
+  /api/businesses/{business_id}/booking-requests/{request_id}/:
+    get:
+      operationId: businesses_booking_requests_retrieve_2
+      description: |-
+        Détail d'une demande pour l'équipe.
+
+        GET /api/businesses/<uuid:business_id>/booking-requests/<uuid:request_id>/
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: request_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingRequestTeam'
+          description: ''
+  /api/businesses/{business_id}/booking-requests/{request_id}/action/:
+    post:
+      operationId: businesses_booking_requests_action_create
+      description: |-
+        Actions équipe : accepter, refuser, contre-proposer.
+
+        POST /api/businesses/<uuid:business_id>/booking-requests/<uuid:request_id>/action/
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: request_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookingRequestActionRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BookingRequestActionRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BookingRequestActionRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingRequestAction'
+          description: ''
+  /api/businesses/{business_id}/categories/:
+    get:
+      operationId: businesses_categories_retrieve
+      description: Scope de throttling commun aux mutations (créations / actions,
+        S9).
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+          description: ''
+    post:
+      operationId: businesses_categories_create
+      description: Scope de throttling commun aux mutations (créations / actions,
+        S9).
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CategoryRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CategoryRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+          description: ''
+  /api/businesses/{business_id}/categories/{category_id}/:
+    get:
+      operationId: businesses_categories_retrieve_2
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: category_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+          description: ''
+    put:
+      operationId: businesses_categories_update
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: category_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CategoryRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CategoryRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+          description: ''
+    patch:
+      operationId: businesses_categories_partial_update
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: category_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedCategoryRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedCategoryRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedCategoryRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+          description: ''
+    delete:
+      operationId: businesses_categories_destroy
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: category_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/businesses/{business_id}/dashboard/:
+    get:
+      operationId: businesses_dashboard_retrieve
+      description: Synthèse du business pour le tableau de bord (S 7-04, RM-20).
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardSummary'
+          description: ''
+  /api/businesses/{business_id}/decisions/:
+    get:
+      operationId: businesses_decisions_retrieve
+      description: Journal des décisions exceptionnelles (US-21, RM-06).
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionLog'
+          description: ''
+  /api/businesses/{business_id}/history/:
+    get:
+      operationId: businesses_history_retrieve
+      description: Historique global avec filtres (tâches, stock, réservations, décisions).
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/businesses/{business_id}/inventories/:
+    get:
+      operationId: businesses_inventories_retrieve
+      description: Scope de throttling commun aux mutations (créations / actions,
+        S9).
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Inventory'
+          description: ''
+    post:
+      operationId: businesses_inventories_create
+      description: Scope de throttling commun aux mutations (créations / actions,
+        S9).
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InventoryRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/InventoryRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/InventoryRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Inventory'
+          description: ''
+  /api/businesses/{business_id}/inventories/{inventory_id}/:
+    get:
+      operationId: businesses_inventories_retrieve_2
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: inventory_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Inventory'
+          description: ''
+  /api/businesses/{business_id}/inventories/{inventory_id}/cloturer/:
+    post:
+      operationId: businesses_inventories_cloturer_create
+      description: 'Clôture : chaque écart non nul devient un ajustement immuable
+        (RM-13).'
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: inventory_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InventoryRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/InventoryRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/InventoryRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Inventory'
+          description: ''
+  /api/businesses/{business_id}/inventories/{inventory_id}/counts/:
+    post:
+      operationId: businesses_inventories_counts_create
+      description: Déclare ou remplace le comptage d'un article (US-22, RM-14).
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: inventory_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryCount'
+          description: ''
+  /api/businesses/{business_id}/inventories/{inventory_id}/counts/{count_id}/:
+    patch:
+      operationId: businesses_inventories_counts_partial_update
+      description: Met à jour fiabilité / quantité d'un comptage tant que l'inventaire
+        est ouvert.
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: count_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: inventory_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryCount'
+          description: ''
+  /api/businesses/{business_id}/invoices/:
+    get:
+      operationId: businesses_invoices_retrieve
+      description: |-
+        Liste et création des factures du business.
+
+        GET /api/businesses/<uuid:business_id>/invoices/
+        POST /api/businesses/<uuid:business_id>/invoices/
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invoice'
+          description: ''
+    post:
+      operationId: businesses_invoices_create
+      description: |-
+        Liste et création des factures du business.
+
+        GET /api/businesses/<uuid:business_id>/invoices/
+        POST /api/businesses/<uuid:business_id>/invoices/
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invoice'
+          description: ''
+  /api/businesses/{business_id}/invoices/{invoice_id}/:
+    get:
+      operationId: businesses_invoices_retrieve_2
+      description: |-
+        Détail d'une facture.
+
+        GET /api/businesses/<uuid:business_id>/invoices/<uuid:invoice_id>/
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: invoice_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invoice'
+          description: ''
+  /api/businesses/{business_id}/invoices/{invoice_id}/mark-paid/:
+    post:
+      operationId: businesses_invoices_mark_paid_create
+      description: |-
+        Marque la facture comme payée.
+
+        POST /api/businesses/<uuid:business_id>/invoices/<uuid:invoice_id>/mark-paid/
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: invoice_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/businesses/{business_id}/invoices/{invoice_id}/mark-sent/:
+    post:
+      operationId: businesses_invoices_mark_sent_create
+      description: |-
+        Marque la facture comme envoyée au client.
+
+        POST /api/businesses/<uuid:business_id>/invoices/<uuid:invoice_id>/mark-sent/
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: invoice_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/businesses/{business_id}/invoices/{invoice_id}/pdf/:
+    get:
+      operationId: businesses_invoices_pdf_retrieve
+      description: |-
+        Télécharge le PDF de la facture.
+
+        GET /api/businesses/<uuid:business_id>/invoices/<uuid:invoice_id>/pdf/
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: invoice_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/businesses/{business_id}/items/:
+    get:
+      operationId: businesses_items_retrieve
+      description: Scope de throttling commun aux mutations (créations / actions,
+        S9).
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Item'
+          description: ''
+    post:
+      operationId: businesses_items_create
+      description: Scope de throttling commun aux mutations (créations / actions,
+        S9).
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ItemRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ItemRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ItemRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Item'
+          description: ''
+  /api/businesses/{business_id}/items/{item_id}/:
+    get:
+      operationId: businesses_items_retrieve_2
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: item_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Item'
+          description: ''
+    put:
+      operationId: businesses_items_update
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: item_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ItemRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ItemRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ItemRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Item'
+          description: ''
+    patch:
+      operationId: businesses_items_partial_update
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: item_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedItemRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedItemRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedItemRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Item'
+          description: ''
+    delete:
+      operationId: businesses_items_destroy
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: item_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/businesses/{business_id}/items/{item_id}/photos/:
+    post:
+      operationId: businesses_items_photos_create
+      description: Scope de throttling commun aux mutations (créations / actions,
+        S9).
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: item_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ItemPhotoRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ItemPhotoRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ItemPhotoRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemPhoto'
+          description: ''
+    delete:
+      operationId: businesses_items_photos_destroy
+      description: Scope de throttling commun aux mutations (créations / actions,
+        S9).
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: item_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/businesses/{business_id}/items/{item_id}/photos/{photo_id}/:
+    post:
+      operationId: businesses_items_photos_create_2
+      description: Scope de throttling commun aux mutations (créations / actions,
+        S9).
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: item_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: photo_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ItemPhotoRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ItemPhotoRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ItemPhotoRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemPhoto'
+          description: ''
+    delete:
+      operationId: businesses_items_photos_destroy_2
+      description: Scope de throttling commun aux mutations (créations / actions,
+        S9).
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: item_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: photo_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/businesses/{business_id}/items/{item_id}/stock/:
+    get:
+      operationId: businesses_items_stock_retrieve
+      description: Stock d'un article + mouvements récents (fiche stock, S 3-03/04).
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: item_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemStockDetail'
+          description: ''
+  /api/businesses/{business_id}/items/{item_id}/stock/history/:
+    get:
+      operationId: businesses_items_stock_history_retrieve
+      description: Historique immuable complet et filtrable d'un article (S 3-04).
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: item_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockMovement'
+          description: ''
+  /api/businesses/{business_id}/items/next-reference/:
+    get:
+      operationId: businesses_items_next_reference_retrieve
+      description: |-
+        `GET /businesses/<id>/items/next-reference/?nom=...`
+
+        Renvoie une référence libre dans le catalogue du business, dérivée du nom.
+
+        Volontairement **sans IA** : c'est une normalisation de chaîne suivie d'un
+        compteur. La router par Gemini coûterait un appel payant, exigerait une
+        photo, et échouerait hors ligne — pour un résultat identique.
+
+        L'unicité est vérifiée ici, sur le catalogue réel : c'est le seul endroit
+        qui connaît toutes les références déjà prises, y compris celles créées par
+        les autres membres de l'équipe.
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NextReference'
+          description: ''
+  /api/businesses/{business_id}/items/scan/{qr_code}/:
+    get:
+      operationId: businesses_items_scan_retrieve
+      description: Récupère un article par son QR code.
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: qr_code
+        schema:
+          type: string
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/businesses/{business_id}/maintenance/tasks/:
+    get:
+      operationId: businesses_maintenance_tasks_retrieve
+      description: Liste des tâches (filtrable) + création manuelle (US-15).
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceTask'
+          description: ''
+    post:
+      operationId: businesses_maintenance_tasks_create
+      description: Liste des tâches (filtrable) + création manuelle (US-15).
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceTask'
+          description: ''
+  /api/businesses/{business_id}/maintenance/tasks/{task_id}/:
+    get:
+      operationId: businesses_maintenance_tasks_retrieve_2
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: task_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceTask'
+          description: ''
+    patch:
+      operationId: businesses_maintenance_tasks_partial_update
+      description: Mise à jour d'une tâche (attribution, coûts) - Sprint 1 & 2.
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: task_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceTask'
+          description: ''
+  /api/businesses/{business_id}/maintenance/tasks/{task_id}/cloturer/:
+    post:
+      operationId: businesses_maintenance_tasks_cloturer_create
+      description: 'Clôture une tâche : TERMINEE ou PARTIELLE acceptée (US-16, US-17,
+        RM-11).'
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: task_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceTask'
+          description: ''
+  /api/businesses/{business_id}/maintenance/tasks/{task_id}/comments/:
+    get:
+      operationId: businesses_maintenance_tasks_comments_retrieve
+      description: Liste et création de commentaires sur une tâche.
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: task_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskComment'
+          description: ''
+    post:
+      operationId: businesses_maintenance_tasks_comments_create
+      description: Liste et création de commentaires sur une tâche.
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: task_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskCommentRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TaskCommentRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TaskCommentRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskComment'
+          description: ''
+  /api/businesses/{business_id}/maintenance/tasks/{task_id}/comments/{comment_id}/:
+    delete:
+      operationId: businesses_maintenance_tasks_comments_destroy
+      description: Détail et suppression d'un commentaire.
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: comment_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: task_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/businesses/{business_id}/maintenance/tasks/{task_id}/steps/{step_id}/:
+    patch:
+      operationId: businesses_maintenance_tasks_steps_partial_update
+      description: Met à jour une étape d'une tâche ouverte (US-16).
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: step_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: task_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedTaskStepUpdateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedTaskStepUpdateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedTaskStepUpdateRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskStepUpdate'
+          description: ''
+  /api/businesses/{business_id}/maintenance/tasks/{task_id}/steps/{step_id}/photos/:
+    get:
+      operationId: businesses_maintenance_tasks_steps_photos_retrieve
+      description: Liste et upload de photos sur une étape de tâche.
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: step_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: task_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskStepPhoto'
+          description: ''
+    post:
+      operationId: businesses_maintenance_tasks_steps_photos_create
+      description: Liste et upload de photos sur une étape de tâche.
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: step_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: task_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskStepPhotoRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TaskStepPhotoRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TaskStepPhotoRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskStepPhoto'
+          description: ''
+  /api/businesses/{business_id}/maintenance/tasks/{task_id}/steps/{step_id}/photos/{photo_id}/:
+    delete:
+      operationId: businesses_maintenance_tasks_steps_photos_destroy
+      description: Suppression d'une photo d'étape.
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: photo_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: step_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: task_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/businesses/{business_id}/members/:
+    get:
+      operationId: businesses_members_retrieve
+      description: Scope de throttling commun aux mutations (créations / actions,
+        S9).
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessMember'
+          description: ''
+    post:
+      operationId: businesses_members_create
+      description: Scope de throttling commun aux mutations (créations / actions,
+        S9).
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BusinessMemberRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BusinessMemberRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BusinessMemberRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessMember'
+          description: ''
+  /api/businesses/{business_id}/members/{member_id}/:
+    patch:
+      operationId: businesses_members_partial_update
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: member_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedBusinessMemberRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedBusinessMemberRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedBusinessMemberRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessMember'
+          description: ''
+    delete:
+      operationId: businesses_members_destroy
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: member_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/businesses/{business_id}/members/{member_id}/accept/:
+    post:
+      operationId: businesses_members_accept_create
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: member_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BusinessMemberRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BusinessMemberRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BusinessMemberRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessMember'
+          description: ''
+  /api/businesses/{business_id}/notifications/:
+    get:
+      operationId: businesses_notifications_retrieve
+      description: Notifications de l'utilisateur connecté (US-28) — propres à chacun.
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notification'
+          description: ''
+  /api/businesses/{business_id}/notifications/{notification_id}/:
+    patch:
+      operationId: businesses_notifications_partial_update
+      description: Marque une notification de l'utilisateur comme lue / non lue (S
+        7-08).
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: notification_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedNotificationRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedNotificationRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedNotificationRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notification'
+          description: ''
+  /api/businesses/{business_id}/notifications/mark-all-read/:
+    post:
+      operationId: businesses_notifications_mark_all_read_create
+      description: Marque toutes les notifications de l'utilisateur comme lues.
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/NotificationRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/NotificationRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notification'
+          description: ''
+  /api/businesses/{business_id}/performance-alerts/:
+    get:
+      operationId: businesses_performance_alerts_retrieve
+      description: Liste des alertes de performance.
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerformanceAlert'
+          description: ''
+  /api/businesses/{business_id}/performance-alerts/{alert_id}/resolve/:
+    post:
+      operationId: businesses_performance_alerts_resolve_create
+      description: Marque une alerte de performance comme résolue.
+      parameters:
+      - in: path
+        name: alert_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/businesses/{business_id}/procedures/:
+    get:
+      operationId: businesses_procedures_retrieve
+      description: Scope de throttling commun aux mutations (créations / actions,
+        S9).
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Procedure'
+          description: ''
+    post:
+      operationId: businesses_procedures_create
+      description: Scope de throttling commun aux mutations (créations / actions,
+        S9).
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProcedureRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ProcedureRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ProcedureRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Procedure'
+          description: ''
+  /api/businesses/{business_id}/procedures/{procedure_id}/:
+    get:
+      operationId: businesses_procedures_retrieve_2
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: procedure_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Procedure'
+          description: ''
+    put:
+      operationId: businesses_procedures_update
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: procedure_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProcedureRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ProcedureRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ProcedureRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Procedure'
+          description: ''
+    patch:
+      operationId: businesses_procedures_partial_update
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: procedure_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedProcedureRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedProcedureRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedProcedureRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Procedure'
+          description: ''
+    delete:
+      operationId: businesses_procedures_destroy
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: procedure_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/businesses/{business_id}/recurring-tasks/:
+    get:
+      operationId: businesses_recurring_tasks_retrieve
+      description: Liste et création de tâches récurrentes.
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecurringTask'
+          description: ''
+    post:
+      operationId: businesses_recurring_tasks_create
+      description: Liste et création de tâches récurrentes.
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecurringTaskRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RecurringTaskRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RecurringTaskRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecurringTask'
+          description: ''
+  /api/businesses/{business_id}/recurring-tasks/{recurring_id}/:
+    get:
+      operationId: businesses_recurring_tasks_retrieve_2
+      description: Détail, modification et suppression d'une tâche récurrente.
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: recurring_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecurringTask'
+          description: ''
+    patch:
+      operationId: businesses_recurring_tasks_partial_update
+      description: Détail, modification et suppression d'une tâche récurrente.
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: recurring_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedRecurringTaskRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedRecurringTaskRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedRecurringTaskRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecurringTask'
+          description: ''
+    delete:
+      operationId: businesses_recurring_tasks_destroy
+      description: Détail, modification et suppression d'une tâche récurrente.
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: recurring_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/businesses/{business_id}/reminders/:
+    get:
+      operationId: businesses_reminders_retrieve
+      description: Liste et création de rappels.
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reminder'
+          description: ''
+    post:
+      operationId: businesses_reminders_create
+      description: Liste et création de rappels.
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reminder'
+          description: ''
+  /api/businesses/{business_id}/reminders/{reminder_id}/:
+    delete:
+      operationId: businesses_reminders_destroy
+      description: Suppression d'un rappel.
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: reminder_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/businesses/{business_id}/reservations/:
+    get:
+      operationId: businesses_reservations_retrieve
+      description: Liste et création de réservations (US-29, RM-01).
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+          description: ''
+    post:
+      operationId: businesses_reservations_create
+      description: Liste et création de réservations (US-29, RM-01).
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+          description: ''
+  /api/businesses/{business_id}/reservations/{reservation_id}/:
+    get:
+      operationId: businesses_reservations_retrieve_2
+      description: Détail d'une réservation du business (US-29, RM-01).
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: reservation_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+          description: ''
+  /api/businesses/{business_id}/reservations/{reservation_id}/annuler/:
+    post:
+      operationId: businesses_reservations_annuler_create
+      description: 'Base des actions de gestion (US-30, US-31) : permission manage.'
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: reservation_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+          description: ''
+  /api/businesses/{business_id}/reservations/{reservation_id}/demarrer/:
+    post:
+      operationId: businesses_reservations_demarrer_create
+      description: 'Base des actions de gestion (US-30, US-31) : permission manage.'
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: reservation_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+          description: ''
+  /api/businesses/{business_id}/reservations/{reservation_id}/terminer/:
+    post:
+      operationId: businesses_reservations_terminer_create
+      description: |-
+        Termine la réservation avec contrôle de retour (Sprint 8 bis).
+
+        Le corps peut fournir le décompte : quantite_retournee, quantite_abimee,
+        quantite_perdue, observations. Sans décompte, tout est rendu en bon état.
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: reservation_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReservationFinishRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ReservationFinishRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ReservationFinishRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservationFinish'
+          description: ''
+  /api/businesses/{business_id}/reservations/{reservation_id}/valider/:
+    post:
+      operationId: businesses_reservations_valider_create
+      description: 'Base des actions de gestion (US-30, US-31) : permission manage.'
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: reservation_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+          description: ''
+  /api/businesses/{business_id}/reservations/bulk/:
+    post:
+      operationId: businesses_reservations_bulk_create
+      description: |-
+        Réservation de plusieurs articles en un seul appel atomique (US-29).
+
+        Toutes les réservations demandées sont créées dans une unique transaction
+        côté moteur (`create_reservations_bulk`) : si un seul article échoue
+        (chevauchement, exposition pleine, article invalide...), la requête
+        entière est rejetée et AUCUNE réservation n'est créée — corrige le
+        comportement précédent où le client appelait la création une fois par
+        article, pouvant laisser une réservation partiellement créée.
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReservationBulkCreateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ReservationBulkCreateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ReservationBulkCreateRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservationBulkCreate'
+          description: ''
+  /api/businesses/{business_id}/roles/:
+    get:
+      operationId: businesses_roles_retrieve
+      description: Scope de throttling commun aux mutations (créations / actions,
+        S9).
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+          description: ''
+    post:
+      operationId: businesses_roles_create
+      description: Scope de throttling commun aux mutations (créations / actions,
+        S9).
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RoleRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RoleRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+          description: ''
+  /api/businesses/{business_id}/roles/{role_id}/:
+    put:
+      operationId: businesses_roles_update
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: role_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RoleRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RoleRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+          description: ''
+    delete:
+      operationId: businesses_roles_destroy
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: role_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/businesses/{business_id}/rules/:
+    get:
+      operationId: businesses_rules_retrieve
+      description: Règles métier du business (RM-07, S 6-05). Listées dès la création.
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessRule'
+          description: ''
+  /api/businesses/{business_id}/rules/{rule_id}/:
+    patch:
+      operationId: businesses_rules_partial_update
+      description: Modifie le mode (AVERTISSEMENT / BLOCAGE) ou l'activation d'une
+        règle.
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: rule_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedBusinessRuleRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedBusinessRuleRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedBusinessRuleRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessRule'
+          description: ''
+  /api/businesses/{business_id}/stock/:
+    get:
+      operationId: businesses_stock_retrieve
+      description: Stock courant de tous les articles, avec états calculés (S 3-03).
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockListItem'
+          description: ''
+  /api/businesses/{business_id}/stock/movements/:
+    post:
+      operationId: businesses_stock_movements_create
+      description: |-
+        Crée un mouvement (US-08 à US-12) : entrée, sortie, retour, perte, dommage.
+
+        Sprint 6 (RM-22) : une sortie est d'abord évaluée contre les règles
+        métier du business (RM-05, RM-07). Règle BLOCAGE = refus obligatoire ;
+        règle AVERTISSEMENT = la demande renvoie les alertes et exige, pour
+        poursuivre, `ignorer_avertissements=true` + `motif_exception` (US-19,
+        US-20, US-21) ainsi que la permission stock.exception (RM-19).
+      parameters:
+      - in: path
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - businesses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StockMovementRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/StockMovementRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/StockMovementRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockMovement'
+          description: ''
+  /api/businesses/current/context/:
+    get:
+      operationId: businesses_current_context_retrieve
+      description: |-
+        Retourne le contexte RBAC complet pour le business courant (X-Business-ID).
+
+        GET /api/businesses/current/context/
+
+        Nécessite :
+          - JWT valide (Authorization: Bearer <access>)
+          - Header X-Business-ID avec l'UUID d'un business dont l'utilisateur est
+            membre ACTIF.
+
+        Réponse :
+          {
+            "business": { "id", "nom", "business_type", "slug" },
+            "membership": { "id", "statut" },
+            "role": { "id", "nom", "is_system" } | null,
+            "permissions": ["codename1", ...]
+          }
+      tags:
+      - businesses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/devices/:
+    post:
+      operationId: devices_create
+      description: POST /api/devices/ — enregistre le token FCM de l'appareil pour
+        les notifications push.
+      tags:
+      - devices
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/devices/{device_id}/:
+    delete:
+      operationId: devices_destroy
+      description: DELETE /api/devices/ — supprime le token FCM (déconnexion push).
+      parameters:
+      - in: path
+        name: device_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - devices
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/invitations/{token}/:
+    get:
+      operationId: invitations_retrieve
+      description: |-
+        Aperçu public d'une invitation (GET /invitations/<token>/).
+
+        Conserve le token signé pour la compatibilité deep link ; les nouveaux
+        parcours utilisent POST /invitations/validate/ avec le code.
+      parameters:
+      - in: path
+        name: token
+        schema:
+          type: string
+        required: true
+      tags:
+      - invitations
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationPreview'
+          description: ''
+  /api/invitations/accept/:
+    post:
+      operationId: invitations_accept_create
+      description: |-
+        Acceptation d'une invitation par code ou lien signé.
+
+        * Non connecté : le mot de passe est requis (compte créé à
+          l'invitation), le membership est activé et des JWT sont renvoyés.
+        * Connecté : pas de mot de passe requis ; l'utilisateur courant doit
+          correspondre à l'email invité (le code n'est jamais transférable).
+
+        La réponse est identique à /auth/register/ ({user, access, refresh}).
+      tags:
+      - invitations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvitationAcceptRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/InvitationAcceptRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/InvitationAcceptRequest'
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationAccept'
+          description: ''
+  /api/invitations/validate/:
+    post:
+      operationId: invitations_validate_create
+      description: |-
+        Validation d'un code d'invitation (POST /invitations/validate/).
+
+        Renvoie les informations nécessaires à la confirmation (business, rôle,
+        inviteur) — jamais d'information sensible. La sécurité (statut,
+        expiration, identité) reste entièrement côté backend.
+      tags:
+      - invitations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvitationCodeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/InvitationCodeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/InvitationCodeRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationCode'
+          description: ''
+  /api/permissions/:
+    get:
+      operationId: permissions_retrieve
+      tags:
+      - permissions
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionCatalogItem'
+          description: ''
+  /api/public/b/{slug}/:
+    get:
+      operationId: public_b_retrieve
+      description: |-
+        Informations publiques d'un business par slug (sans authentification).
+
+        GET /api/public/b/<slug>/
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - public
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/public/b/{slug}/active-request/:
+    get:
+      operationId: public_b_active_request_retrieve
+      description: |-
+        Vérifie si le visiteur a une demande active.
+
+        GET /api/public/b/<slug>/active-request?visitor_id=xxx
+        Source de vérité backend, localStorage n'est qu'un cache.
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - public
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/public/b/{slug}/booking-requests/:
+    post:
+      operationId: public_b_booking_requests_create
+      description: |-
+        Création d'une demande de location par un client externe.
+
+        POST /api/public/b/<slug>/booking-requests/
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - public
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublicBookingRequestCreateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PublicBookingRequestCreateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PublicBookingRequestCreateRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicBookingRequestCreate'
+          description: ''
+  /api/public/b/{slug}/booking-requests/{token}/:
+    get:
+      operationId: public_b_booking_requests_retrieve
+      description: |-
+        Suivi d'une demande par le client (via token magique).
+
+        GET /api/public/b/<slug>/booking-requests/<token>/
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: token
+        schema:
+          type: string
+        required: true
+      tags:
+      - public
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicBookingRequestDetail'
+          description: ''
+  /api/public/b/{slug}/booking-requests/{token}/accept-counter/:
+    post:
+      operationId: public_b_booking_requests_accept_counter_create
+      description: |-
+        Client accepte la contre-proposition de l'équipe.
+
+        POST /api/public/b/<slug>/booking-requests/<token>/accept-counter/
+        Crée la réservation avec les termes de la contre-proposition.
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: token
+        schema:
+          type: string
+        required: true
+      tags:
+      - public
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/public/b/{slug}/booking-requests/{token}/cancel/:
+    post:
+      operationId: public_b_booking_requests_cancel_create
+      description: |-
+        Annulation d'une demande par le client.
+
+        POST /api/public/b/<slug>/booking-requests/<token>/cancel/
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: token
+        schema:
+          type: string
+        required: true
+      tags:
+      - public
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/public/b/{slug}/booking-requests/{token}/reject-counter/:
+    post:
+      operationId: public_b_booking_requests_reject_counter_create
+      description: |-
+        Client refuse la contre-proposition de l'équipe.
+
+        POST /api/public/b/<slug>/booking-requests/<token>/reject-counter/
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: token
+        schema:
+          type: string
+        required: true
+      tags:
+      - public
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/public/b/{slug}/categories/:
+    get:
+      operationId: public_b_categories_retrieve
+      description: |-
+        Catégories publiques d'un business (lecture seule, sans auth).
+
+        GET /api/public/b/<slug>/categories/
+        Retourne les catégories avec leur image dédiée (jamais d'image d'article).
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - public
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicCategory'
+          description: ''
+  /api/public/b/{slug}/customer-requests/:
+    get:
+      operationId: public_b_customer_requests_retrieve
+      description: |-
+        Liste des demandes d'un visiteur (pour page Mes demandes).
+
+        GET /api/public/b/<slug>/requests?visitor_id=xxx
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - public
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/public/b/{slug}/invoices/{reservation_id}/:
+    get:
+      operationId: public_b_invoices_retrieve
+      description: |-
+        Téléchargement facture par le client (via token réservation).
+
+        GET /api/public/b/<slug>/invoices/<uuid:reservation_id>/
+      parameters:
+      - in: path
+        name: reservation_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - public
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoicePublic'
+          description: ''
+  /api/public/b/{slug}/invoices/{reservation_id}/pdf/:
+    get:
+      operationId: public_b_invoices_pdf_retrieve
+      description: |-
+        Téléchargement PDF facture par le client (public).
+
+        GET /api/public/b/<slug>/invoices/<uuid:reservation_id>/pdf/
+      parameters:
+      - in: path
+        name: reservation_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - public
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/public/b/{slug}/items/:
+    get:
+      operationId: public_b_items_retrieve
+      description: |-
+        Catalogue public d'un business (lecture seule, sans authentification).
+
+        GET /api/public/b/<slug>/items/
+        Retourne les articles publiés (is_published=True, statut=ACTIF).
+
+        Query params optionnels (Option B - dispo temps réel) :
+        - date_debut=YYYY-MM-DD
+        - date_fin=YYYY-MM-DD
+        Si fournis, ajoute pour chaque article :
+          - total_stock: stock total possédé
+          - disponible: unités disponibles sur la période
+          - reserves_pendant_periode: unités déjà réservées sur la période
+          - en_entretien: unités en maintenance
+          - peut_reserver: booléen
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - public
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicItem'
+          description: ''
+  /api/public/b/{slug}/items/{item_id}/availability/:
+    get:
+      operationId: public_b_items_availability_retrieve
+      description: |-
+        Disponibilité d'un article précis sur une période (Option B).
+
+        GET /api/public/b/<slug>/items/<uuid:item_id>/availability/?date_debut=...&date_fin=...
+      parameters:
+      - in: path
+        name: item_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - public
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/public/b/{slug}/items/{item_id}/recommendations/:
+    get:
+      operationId: public_b_items_recommendations_retrieve
+      description: |-
+        Recommandations d'articles pour une fiche article donnée.
+
+        GET /api/public/b/<slug>/items/{id}/recommendations/
+        Paramètres :
+        - type: similar | complementary | used_for | often_rented_together (default: complementary)
+        - limit: nombre de résultats (default: 4, max: 12)
+      parameters:
+      - in: path
+        name: item_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - public
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicItem'
+          description: ''
+  /api/public/b/{slug}/recover/:
+    post:
+      operationId: public_b_recover_create
+      description: |-
+        Retrouver une demande via email/téléphone/visitorId (sans OTP strict pour MVP).
+
+        POST /api/public/b/<slug>/recover {email, phone, visitor_id}
+        Retourne les demandes récentes masquées, nécessite vérification côté prod (OTP).
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - public
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/public/b/{slug}/search/:
+    get:
+      operationId: public_b_search_retrieve
+      description: |-
+        Recherche intelligente sur le catalogue public d'un business.
+
+        GET /api/public/b/<slug>/search/
+        Paramètres :
+        - q: requête utilisateur en langage naturel
+        - date_debut / date_fin: dates optionnelles pour filtre de disponibilité
+        - category: UUID de catégorie (optionnel)
+        - page / page_size: pagination
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - public
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicItem'
+          description: ''
+  /api/public/booking-requests/{token}/:
+    get:
+      operationId: public_booking_requests_retrieve
+      description: |-
+        Suivi d'une demande par le client, sans connaître le slug.
+
+        GET /api/public/booking-requests/<token>/
+        Retourne la demande + le slug du business pour rediriger.
+      parameters:
+      - in: path
+        name: token
+        schema:
+          type: string
+        required: true
+      tags:
+      - public
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+components:
+  schemas:
+    ActionEnum:
+      enum:
+      - accepter
+      - refuser
+      - contre_proposer
+      type: string
+      description: |-
+        * `accepter` - accepter
+        * `refuser` - refuser
+        * `contre_proposer` - contre_proposer
+    ActiveInactiveStatutEnum:
+      enum:
+      - ACTIF
+      - INACTIF
+      type: string
+      description: |-
+        * `ACTIF` - Actif
+        * `INACTIF` - Inactif
+    ActivityLog:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        action:
+          type: string
+          readOnly: true
+        acteur:
+          allOf:
+          - $ref: '#/components/schemas/User'
+          readOnly: true
+        item_id:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        cible:
+          type: string
+          readOnly: true
+        detail:
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - acteur
+      - action
+      - cible
+      - created_at
+      - detail
+      - id
+      - item_id
+    Alert:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        item_id:
+          type: string
+          format: uuid
+          readOnly: true
+        item_nom:
+          type: string
+          readOnly: true
+        code:
+          type: string
+          readOnly: true
+        mode:
+          allOf:
+          - $ref: '#/components/schemas/ModeEnum'
+          readOnly: true
+        message:
+          type: string
+          readOnly: true
+        quantite:
+          type: integer
+          readOnly: true
+          nullable: true
+        mouvement_id:
+          type: string
+          format: uuid
+          nullable: true
+          readOnly: true
+        acteur:
+          allOf:
+          - $ref: '#/components/schemas/User'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - acteur
+      - code
+      - created_at
+      - id
+      - item_id
+      - item_nom
+      - message
+      - mode
+      - mouvement_id
+      - quantite
+    BookingRequestAction:
+      type: object
+      description: 'Actions équipe : accepter, refuser, contre-proposer.'
+      properties:
+        action:
+          $ref: '#/components/schemas/ActionEnum'
+        motif_refus:
+          type: string
+        date_debut:
+          type: string
+          format: date
+        date_fin:
+          type: string
+          format: date
+        quantite:
+          type: integer
+          minimum: 1
+        prix:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        message:
+          type: string
+      required:
+      - action
+    BookingRequestActionRequest:
+      type: object
+      description: 'Actions équipe : accepter, refuser, contre-proposer.'
+      properties:
+        action:
+          $ref: '#/components/schemas/ActionEnum'
+        motif_refus:
+          type: string
+        date_debut:
+          type: string
+          format: date
+        date_fin:
+          type: string
+          format: date
+        quantite:
+          type: integer
+          minimum: 1
+        prix:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        message:
+          type: string
+      required:
+      - action
+    BookingRequestStatutEnum:
+      enum:
+      - DRAFT
+      - EN_ATTENTE
+      - ACCEPTEE
+      - REFUSEE
+      - EXPIREE
+      - ANNULEE_CLIENT
+      - CONVERTIE
+      type: string
+      description: |-
+        * `DRAFT` - Brouillon
+        * `EN_ATTENTE` - En attente de traitement
+        * `ACCEPTEE` - Acceptée par l'équipe
+        * `REFUSEE` - Refusée
+        * `EXPIREE` - Expirée (pas de réponse)
+        * `ANNULEE_CLIENT` - Annulée par le client
+        * `CONVERTIE` - Transformée en réservation
+    BookingRequestTeam:
+      type: object
+      description: Détail d'une demande pour l'équipe (avec infos complètes).
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        item_id:
+          type: string
+          format: uuid
+          readOnly: true
+        item_nom:
+          type: string
+          readOnly: true
+        item_reference:
+          type: string
+          readOnly: true
+        client_nom:
+          type: string
+          readOnly: true
+        client_telephone:
+          type: string
+          readOnly: true
+        client_email:
+          type: string
+          format: email
+          readOnly: true
+        date_debut:
+          type: string
+          format: date
+          readOnly: true
+        date_fin:
+          type: string
+          format: date
+          readOnly: true
+        quantite:
+          type: integer
+          readOnly: true
+        message:
+          type: string
+          readOnly: true
+          description: Message du client (besoin, occasion, etc.)
+        lieu_nom:
+          type: string
+          readOnly: true
+        lieu_adresse:
+          type: string
+          readOnly: true
+        contact_nom:
+          type: string
+          readOnly: true
+        contact_telephone:
+          type: string
+          readOnly: true
+        notes_livraison:
+          type: string
+          readOnly: true
+        statut:
+          allOf:
+          - $ref: '#/components/schemas/BookingRequestStatutEnum'
+          readOnly: true
+        statut_display:
+          type: string
+          readOnly: true
+        traite_par:
+          allOf:
+          - $ref: '#/components/schemas/User'
+          readOnly: true
+        traite_le:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        motif_refus:
+          type: string
+          readOnly: true
+        contre_proposition:
+          readOnly: true
+          nullable: true
+          description: 'Contre-proposition : {date_debut, date_fin, quantite, prix,
+            message}'
+        reservation_creee_id:
+          type: string
+          format: uuid
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - client_email
+      - client_nom
+      - client_telephone
+      - contact_nom
+      - contact_telephone
+      - contre_proposition
+      - created_at
+      - date_debut
+      - date_fin
+      - id
+      - item_id
+      - item_nom
+      - item_reference
+      - lieu_adresse
+      - lieu_nom
+      - message
+      - motif_refus
+      - notes_livraison
+      - quantite
+      - reservation_creee_id
+      - statut
+      - statut_display
+      - traite_le
+      - traite_par
+      - updated_at
+    Business:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        nom:
+          type: string
+          maxLength: 150
+        slug:
+          type: string
+          readOnly: true
+          nullable: true
+          pattern: ^[-a-zA-Z0-9_]+$
+        business_type:
+          $ref: '#/components/schemas/BusinessTypeEnum'
+        adresse:
+          type: string
+          maxLength: 255
+        telephone:
+          type: string
+          maxLength: 30
+        email:
+          oneOf:
+          - type: string
+            format: email
+            maxLength: 254
+          - type: string
+            maxLength: 0
+        logoUrl:
+          oneOf:
+          - type: string
+            format: uri
+          - type: string
+            maxLength: 0
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - nom
+      - slug
+    BusinessMember:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        user:
+          allOf:
+          - $ref: '#/components/schemas/User'
+          readOnly: true
+        role:
+          allOf:
+          - $ref: '#/components/schemas/Role'
+          readOnly: true
+        statut:
+          $ref: '#/components/schemas/BusinessMemberStatutEnum'
+        invited_by:
+          allOf:
+          - $ref: '#/components/schemas/User'
+          readOnly: true
+        invited_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - id
+      - invited_at
+      - invited_by
+      - role
+      - user
+    BusinessMemberRequest:
+      type: object
+      properties:
+        statut:
+          $ref: '#/components/schemas/BusinessMemberStatutEnum'
+    BusinessMemberStatutEnum:
+      enum:
+      - ACTIF
+      - INVITE
+      - BLOQUE
+      - CANCELLED
+      - EXPIRED
+      type: string
+      description: |-
+        * `ACTIF` - Actif
+        * `INVITE` - Invite
+        * `BLOQUE` - Bloque
+        * `CANCELLED` - Cancelled
+        * `EXPIRED` - Expired
+    BusinessRequest:
+      type: object
+      properties:
+        nom:
+          type: string
+          minLength: 1
+          maxLength: 150
+        business_type:
+          $ref: '#/components/schemas/BusinessTypeEnum'
+        adresse:
+          type: string
+          maxLength: 255
+        telephone:
+          type: string
+          maxLength: 30
+        email:
+          oneOf:
+          - type: string
+            format: email
+            maxLength: 254
+          - type: string
+            maxLength: 0
+        logoUrl:
+          oneOf:
+          - type: string
+            format: uri
+          - type: string
+            maxLength: 0
+        logo:
+          type: string
+          format: binary
+          writeOnly: true
+          nullable: true
+      required:
+      - nom
+    BusinessRule:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        code:
+          allOf:
+          - $ref: '#/components/schemas/CodeEnum'
+          readOnly: true
+        libelle:
+          type: string
+          readOnly: true
+        mode:
+          $ref: '#/components/schemas/ModeEnum'
+        est_actif:
+          type: boolean
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - code
+      - id
+      - libelle
+      - updated_at
+    BusinessType:
+      type: object
+      properties:
+        codename:
+          type: string
+        libelle:
+          type: string
+      required:
+      - codename
+      - libelle
+    BusinessTypeEnum:
+      enum:
+      - DECORATION_RENTAL
+      - GENERAL_INVENTORY
+      type: string
+      description: |-
+        * `DECORATION_RENTAL` - Location & Décoration d'événements
+        * `GENERAL_INVENTORY` - Gestion de Stock Général
+    Category:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        nom:
+          type: string
+          maxLength: 150
+        description:
+          type: string
+        parent_id:
+          type: string
+          format: uuid
+          nullable: true
+        item_count:
+          type: integer
+          readOnly: true
+        entretien_requis:
+          type: boolean
+          nullable: true
+        procedure_id:
+          type: string
+          format: uuid
+          nullable: true
+        image:
+          type: string
+          format: uri
+          nullable: true
+        image_url:
+          type: string
+          nullable: true
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - image_url
+      - item_count
+      - nom
+      - updated_at
+    CategoryRequest:
+      type: object
+      properties:
+        nom:
+          type: string
+          minLength: 1
+          maxLength: 150
+        description:
+          type: string
+        parent_id:
+          type: string
+          format: uuid
+          nullable: true
+        entretien_requis:
+          type: boolean
+          nullable: true
+        procedure_id:
+          type: string
+          format: uuid
+          nullable: true
+        image:
+          type: string
+          format: binary
+          nullable: true
+      required:
+      - nom
+    CategoryShort:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        nom:
+          type: string
+          maxLength: 150
+      required:
+      - id
+      - nom
+    CategoryShortRequest:
+      type: object
+      properties:
+        nom:
+          type: string
+          minLength: 1
+          maxLength: 150
+      required:
+      - nom
+    CodeEnum:
+      enum:
+      - ARTICLE_EN_ENTRETIEN
+      - ENTRETIEN_PARTIEL
+      - ARTICLE_A_VERIFIER
+      type: string
+      description: |-
+        * `ARTICLE_EN_ENTRETIEN` - Sortir un article en entretien
+        * `ENTRETIEN_PARTIEL` - Sortir un article à l'entretien partiel
+        * `ARTICLE_A_VERIFIER` - Sortir un article à vérifier
+    DashboardSummary:
+      type: object
+      properties:
+        total_articles:
+          type: integer
+        articles_en_service:
+          type: integer
+        articles_en_maintenance:
+          type: integer
+        articles_en_retard:
+          type: integer
+        disponibilite_globale:
+          type: number
+          format: double
+        alertes_actives:
+          type: integer
+        taches_en_cours:
+          type: integer
+        reservations_en_cours:
+          type: integer
+      required:
+      - alertes_actives
+      - articles_en_maintenance
+      - articles_en_retard
+      - articles_en_service
+      - disponibilite_globale
+      - reservations_en_cours
+      - taches_en_cours
+      - total_articles
+    DecisionLog:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        item_id:
+          type: string
+          format: uuid
+          readOnly: true
+        item_nom:
+          type: string
+          readOnly: true
+        code:
+          type: string
+          readOnly: true
+        motif:
+          type: string
+          readOnly: true
+        quantite:
+          type: integer
+          readOnly: true
+          nullable: true
+        mouvement_id:
+          type: string
+          format: uuid
+          nullable: true
+          readOnly: true
+        acteur:
+          allOf:
+          - $ref: '#/components/schemas/User'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - acteur
+      - code
+      - created_at
+      - id
+      - item_id
+      - item_nom
+      - motif
+      - mouvement_id
+      - quantite
+    FiabiliteEnum:
+      enum:
+      - CERTAIN
+      - ESTIME
+      - NON_VERIFIE
+      type: string
+      description: |-
+        * `CERTAIN` - Certain
+        * `ESTIME` - Estimé
+        * `NON_VERIFIE` - Non vérifié
+    GoogleAuth:
+      type: object
+      description: 'Connexion Google : reçoit l''ID token OAuth 2.0 de l''app Android.'
+      properties:
+        id_token:
+          type: string
+      required:
+      - id_token
+    GoogleAuthRequest:
+      type: object
+      description: 'Connexion Google : reçoit l''ID token OAuth 2.0 de l''app Android.'
+      properties:
+        id_token:
+          type: string
+          minLength: 1
+      required:
+      - id_token
+    ImageDescription:
+      type: object
+      description: Photo d'article analysée par Gemini (POST /ai/image-description/).
+      properties:
+        image:
+          type: string
+          format: uri
+      required:
+      - image
+    ImageDescriptionRequest:
+      type: object
+      description: Photo d'article analysée par Gemini (POST /ai/image-description/).
+      properties:
+        image:
+          type: string
+          format: binary
+      required:
+      - image
+    Inventory:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        libelle:
+          type: string
+          maxLength: 200
+        statut:
+          allOf:
+          - $ref: '#/components/schemas/InventoryStatutEnum'
+          readOnly: true
+        avancement:
+          type: number
+          format: double
+          readOnly: true
+        created_by:
+          allOf:
+          - $ref: '#/components/schemas/User'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        closed_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+      required:
+      - avancement
+      - closed_at
+      - created_at
+      - created_by
+      - id
+      - statut
+    InventoryCount:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        item_id:
+          type: string
+          format: uuid
+          readOnly: true
+        item_nom:
+          type: string
+          readOnly: true
+        quantite_theorique:
+          type: integer
+          readOnly: true
+        quantite_comptee:
+          type: integer
+          readOnly: true
+        fiabilite:
+          allOf:
+          - $ref: '#/components/schemas/FiabiliteEnum'
+          readOnly: true
+        ecart:
+          type: integer
+          readOnly: true
+        declared_by:
+          allOf:
+          - $ref: '#/components/schemas/User'
+          readOnly: true
+        declared_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - declared_at
+      - declared_by
+      - ecart
+      - fiabilite
+      - id
+      - item_id
+      - item_nom
+      - quantite_comptee
+      - quantite_theorique
+    InventoryRequest:
+      type: object
+      properties:
+        libelle:
+          type: string
+          maxLength: 200
+    InventoryStatutEnum:
+      enum:
+      - EN_COURS
+      - CLOTURE
+      type: string
+      description: |-
+        * `EN_COURS` - En cours
+        * `CLOTURE` - Clôturé
+    InvitationAccept:
+      type: object
+      description: |-
+        Acceptation d'une invitation (POST /invitations/accept/).
+
+        Deux modes :
+        * non connecté : `code` (ou `token`) + mot de passe requis (compte créé à
+          l'invitation sans mot de passe) → JWT renvoyés (connexion immédiate) ;
+        * connecté : `code` seul, l'utilisateur courant doit correspondre à
+          l'email invité → le membership est activé sans nouveau mot de passe.
+      properties:
+        token:
+          type: string
+        code:
+          type: string
+          maxLength: 24
+        first_name:
+          type: string
+          maxLength: 150
+        last_name:
+          type: string
+          maxLength: 150
+        telephone:
+          type: string
+    InvitationAcceptRequest:
+      type: object
+      description: |-
+        Acceptation d'une invitation (POST /invitations/accept/).
+
+        Deux modes :
+        * non connecté : `code` (ou `token`) + mot de passe requis (compte créé à
+          l'invitation sans mot de passe) → JWT renvoyés (connexion immédiate) ;
+        * connecté : `code` seul, l'utilisateur courant doit correspondre à
+          l'email invité → le membership est activé sans nouveau mot de passe.
+      properties:
+        token:
+          type: string
+          minLength: 1
+        code:
+          type: string
+          minLength: 1
+          maxLength: 24
+        password:
+          type: string
+          writeOnly: true
+          minLength: 8
+        first_name:
+          type: string
+          maxLength: 150
+        last_name:
+          type: string
+          maxLength: 150
+        telephone:
+          type: string
+    InvitationCode:
+      type: object
+      description: |-
+        Validation d'un code d'invitation (POST /invitations/validate/).
+
+        La normalisation et la recherche se font côté vue ; un code inconnu ou
+        malformé est traité comme « Code invalide » (404), pas comme une erreur
+        de champ.
+      properties:
+        code:
+          type: string
+          maxLength: 24
+      required:
+      - code
+    InvitationCodeRequest:
+      type: object
+      description: |-
+        Validation d'un code d'invitation (POST /invitations/validate/).
+
+        La normalisation et la recherche se font côté vue ; un code inconnu ou
+        malformé est traité comme « Code invalide » (404), pas comme une erreur
+        de champ.
+      properties:
+        code:
+          type: string
+          minLength: 1
+          maxLength: 24
+      required:
+      - code
+    InvitationPreview:
+      type: object
+      description: Aperçu public d'une invitation (GET /invitations/<token>/).
+      properties:
+        email:
+          type: string
+          format: email
+        business_id:
+          type: string
+          format: uuid
+        business_nom:
+          type: string
+        inviteur:
+          type: string
+          format: email
+          nullable: true
+        role:
+          type: string
+          nullable: true
+        statut:
+          type: string
+      required:
+      - business_id
+      - business_nom
+      - email
+      - inviteur
+      - role
+      - statut
+    Invoice:
+      type: object
+      description: Serializer pour les factures (équipe).
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        numero:
+          type: string
+          readOnly: true
+        type:
+          allOf:
+          - $ref: '#/components/schemas/InvoiceTypeEnum'
+          readOnly: true
+        type_display:
+          type: string
+          readOnly: true
+        statut:
+          allOf:
+          - $ref: '#/components/schemas/InvoiceStatutEnum'
+          readOnly: true
+        statut_display:
+          type: string
+          readOnly: true
+        reservation_id:
+          type: string
+          format: uuid
+          readOnly: true
+        item_nom:
+          type: string
+          readOnly: true
+        client_nom:
+          type: string
+          readOnly: true
+        client_email:
+          type: string
+          format: email
+          readOnly: true
+        client_telephone:
+          type: string
+          readOnly: true
+        client_adresse:
+          type: string
+          readOnly: true
+        lignes:
+          readOnly: true
+          description: '[{description, quantite, prix_unitaire, total}]'
+        sous_total:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          readOnly: true
+        tva_taux:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,2}(?:\.\d{0,2})?$
+          readOnly: true
+          description: 'Ex: 18.00 pour 18%'
+        tva_montant:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          readOnly: true
+        total_ttc:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          readOnly: true
+        pdf_url:
+          type: string
+          nullable: true
+          readOnly: true
+        generee_le:
+          type: string
+          format: date-time
+          readOnly: true
+        envoyee_le:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        payee_le:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        generee_par:
+          allOf:
+          - $ref: '#/components/schemas/User'
+          readOnly: true
+      required:
+      - client_adresse
+      - client_email
+      - client_nom
+      - client_telephone
+      - envoyee_le
+      - generee_le
+      - generee_par
+      - id
+      - item_nom
+      - lignes
+      - numero
+      - payee_le
+      - pdf_url
+      - reservation_id
+      - sous_total
+      - statut
+      - statut_display
+      - total_ttc
+      - tva_montant
+      - tva_taux
+      - type
+      - type_display
+    InvoicePublic:
+      type: object
+      description: Serializer public pour téléchargement client (via token).
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        numero:
+          type: string
+          readOnly: true
+        type:
+          allOf:
+          - $ref: '#/components/schemas/InvoiceTypeEnum'
+          readOnly: true
+        statut:
+          allOf:
+          - $ref: '#/components/schemas/InvoiceStatutEnum'
+          readOnly: true
+        client_nom:
+          type: string
+          readOnly: true
+        client_email:
+          type: string
+          format: email
+          readOnly: true
+        item_nom:
+          type: string
+          readOnly: true
+        lignes:
+          readOnly: true
+          description: '[{description, quantite, prix_unitaire, total}]'
+        sous_total:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          readOnly: true
+        tva_taux:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,2}(?:\.\d{0,2})?$
+          readOnly: true
+          description: 'Ex: 18.00 pour 18%'
+        tva_montant:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          readOnly: true
+        total_ttc:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          readOnly: true
+        pdf_url:
+          type: string
+          nullable: true
+          readOnly: true
+        generee_le:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - client_email
+      - client_nom
+      - generee_le
+      - id
+      - item_nom
+      - lignes
+      - numero
+      - pdf_url
+      - sous_total
+      - statut
+      - total_ttc
+      - tva_montant
+      - tva_taux
+      - type
+    InvoiceStatutEnum:
+      enum:
+      - BROUILLON
+      - PROFORMA
+      - DEFINITIVE
+      - PAYEE
+      - ANNULEE
+      type: string
+      description: |-
+        * `BROUILLON` - Brouillon
+        * `PROFORMA` - Proforma
+        * `DEFINITIVE` - Définitive
+        * `PAYEE` - Payée
+        * `ANNULEE` - Annulée
+    InvoiceTypeEnum:
+      enum:
+      - PROFORMA
+      - DEFINITIVE
+      - AVOIR
+      type: string
+      description: |-
+        * `PROFORMA` - Proforma (à la validation réservation)
+        * `DEFINITIVE` - Définitive (à la fin réservation)
+        * `AVOIR` - Avoir (remboursement/annulation)
+    Item:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        nom:
+          type: string
+          maxLength: 200
+        reference:
+          type: string
+          nullable: true
+          maxLength: 100
+        description:
+          type: string
+        prix:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        unite:
+          type: string
+          maxLength: 30
+        statut:
+          $ref: '#/components/schemas/ActiveInactiveStatutEnum'
+        is_published:
+          type: boolean
+        characteristics: {}
+        category:
+          allOf:
+          - $ref: '#/components/schemas/CategoryShort'
+          readOnly: true
+        photos:
+          type: array
+          items:
+            $ref: '#/components/schemas/ItemPhoto'
+          readOnly: true
+        entretien_requis:
+          type: boolean
+          nullable: true
+        etat_entretien:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        a_verifier:
+          type: boolean
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - a_verifier
+      - category
+      - created_at
+      - etat_entretien
+      - id
+      - nom
+      - photos
+      - updated_at
+    ItemDescription:
+      type: object
+      description: |-
+        Entrée de la génération de description.
+
+        `source` dit d'où viennent les informations. Le champ existe pour que le
+        serveur construise une consigne adaptée — et pour que l'intention de
+        l'utilisateur reste explicite jusqu'au bout de la chaîne.
+      properties:
+        source:
+          $ref: '#/components/schemas/SourceEnum'
+        nom:
+          type: string
+          maxLength: 200
+        mots_cles:
+          type: string
+          maxLength: 500
+        description_actuelle:
+          type: string
+          maxLength: 2000
+        consigne:
+          type: string
+          maxLength: 1000
+        categorie:
+          type: string
+          maxLength: 150
+        marque:
+          type: string
+          maxLength: 150
+        reference:
+          type: string
+          maxLength: 100
+        unite:
+          type: string
+          maxLength: 30
+        prix:
+          type: string
+          maxLength: 50
+        caracteristiques:
+          type: object
+          additionalProperties:
+            type: string
+            maxLength: 200
+      required:
+      - source
+    ItemDescriptionRequest:
+      type: object
+      description: |-
+        Entrée de la génération de description.
+
+        `source` dit d'où viennent les informations. Le champ existe pour que le
+        serveur construise une consigne adaptée — et pour que l'intention de
+        l'utilisateur reste explicite jusqu'au bout de la chaîne.
+      properties:
+        source:
+          $ref: '#/components/schemas/SourceEnum'
+        nom:
+          type: string
+          maxLength: 200
+        mots_cles:
+          type: string
+          maxLength: 500
+        description_actuelle:
+          type: string
+          maxLength: 2000
+        consigne:
+          type: string
+          maxLength: 1000
+        categorie:
+          type: string
+          maxLength: 150
+        marque:
+          type: string
+          maxLength: 150
+        reference:
+          type: string
+          maxLength: 100
+        unite:
+          type: string
+          maxLength: 30
+        prix:
+          type: string
+          maxLength: 50
+        caracteristiques:
+          type: object
+          additionalProperties:
+            type: string
+            maxLength: 200
+      required:
+      - source
+    ItemPhoto:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        image:
+          type: string
+          format: uri
+        caption:
+          type: string
+          maxLength: 150
+        order:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - image
+    ItemPhotoRequest:
+      type: object
+      properties:
+        image:
+          type: string
+          format: binary
+        caption:
+          type: string
+          maxLength: 150
+        order:
+          type: integer
+          maximum: 32767
+          minimum: 0
+      required:
+      - image
+    ItemRequest:
+      type: object
+      properties:
+        nom:
+          type: string
+          minLength: 1
+          maxLength: 200
+        reference:
+          type: string
+          nullable: true
+          maxLength: 100
+        description:
+          type: string
+        prix:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        unite:
+          type: string
+          maxLength: 30
+        statut:
+          $ref: '#/components/schemas/ActiveInactiveStatutEnum'
+        is_published:
+          type: boolean
+        characteristics: {}
+        category_id:
+          type: string
+          format: uuid
+          writeOnly: true
+          nullable: true
+        entretien_requis:
+          type: boolean
+          nullable: true
+        initial_quantity:
+          type: integer
+          maximum: 1000000
+          minimum: 1
+          writeOnly: true
+        procedure_id:
+          type: string
+          format: uuid
+          writeOnly: true
+          nullable: true
+      required:
+      - nom
+    ItemStockDetail:
+      type: object
+      properties:
+        item:
+          type: object
+          additionalProperties: {}
+        stock:
+          type: object
+          additionalProperties: {}
+        mouvements:
+          type: array
+          items: {}
+      required:
+      - item
+      - mouvements
+      - stock
+    LoginRequest:
+      type: object
+      description: JWT + infos utilisateur dans la réponse de connexion.
+      properties:
+        email:
+          type: string
+          writeOnly: true
+          minLength: 1
+        password:
+          type: string
+          writeOnly: true
+          minLength: 1
+      required:
+      - email
+      - password
+    MaintenanceTask:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        item_id:
+          type: string
+          format: uuid
+          readOnly: true
+        item_nom:
+          type: string
+          readOnly: true
+        procedure_id:
+          type: string
+          format: uuid
+          readOnly: true
+        procedure_nom:
+          type: string
+          readOnly: true
+        motif:
+          type: string
+          readOnly: true
+        statut:
+          allOf:
+          - $ref: '#/components/schemas/MaintenanceTaskStatutEnum'
+          readOnly: true
+        etapes:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        etat_article:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskStep'
+          readOnly: true
+        assigned_to:
+          allOf:
+          - $ref: '#/components/schemas/User'
+          readOnly: true
+        assigned_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: Date d'assignation de la tâche
+        assigned_by:
+          allOf:
+          - $ref: '#/components/schemas/User'
+          readOnly: true
+        created_by:
+          allOf:
+          - $ref: '#/components/schemas/User'
+          readOnly: true
+        cout_main_oeuvre:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          readOnly: true
+          nullable: true
+          description: Coût de la main d'oeuvre
+        cout_materiel:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          readOnly: true
+          nullable: true
+          description: Coût du matériel utilisé
+        cout_total:
+          type: number
+          format: double
+          nullable: true
+          readOnly: true
+        comments_count:
+          type: integer
+          readOnly: true
+        duree_totale:
+          type: integer
+          nullable: true
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - assigned_at
+      - assigned_by
+      - assigned_to
+      - comments_count
+      - cout_main_oeuvre
+      - cout_materiel
+      - cout_total
+      - created_at
+      - created_by
+      - duree_totale
+      - etapes
+      - etat_article
+      - id
+      - item_id
+      - item_nom
+      - motif
+      - procedure_id
+      - procedure_nom
+      - statut
+      - steps
+      - updated_at
+    MaintenanceTaskStatutEnum:
+      enum:
+      - EN_COURS
+      - PARTIELLE
+      - TERMINEE
+      type: string
+      description: |-
+        * `EN_COURS` - En cours
+        * `PARTIELLE` - Partielle
+        * `TERMINEE` - Terminée
+    ModeEnum:
+      enum:
+      - AVERTISSEMENT
+      - BLOCAGE
+      type: string
+      description: |-
+        * `AVERTISSEMENT` - Avertissement
+        * `BLOCAGE` - Blocage
+    NextReference:
+      type: object
+      description: Entrée de la proposition de référence.
+      properties:
+        nom:
+          type: string
+          maxLength: 200
+    Notification:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        code:
+          type: string
+          readOnly: true
+        message:
+          type: string
+          readOnly: true
+        item_id:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        lu:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - code
+      - created_at
+      - id
+      - item_id
+      - message
+    NotificationRequest:
+      type: object
+      properties:
+        lu:
+          type: boolean
+    PatchedBusinessMemberRequest:
+      type: object
+      properties:
+        statut:
+          $ref: '#/components/schemas/BusinessMemberStatutEnum'
+    PatchedBusinessRuleRequest:
+      type: object
+      properties:
+        mode:
+          $ref: '#/components/schemas/ModeEnum'
+        est_actif:
+          type: boolean
+    PatchedCategoryRequest:
+      type: object
+      properties:
+        nom:
+          type: string
+          minLength: 1
+          maxLength: 150
+        description:
+          type: string
+        parent_id:
+          type: string
+          format: uuid
+          nullable: true
+        entretien_requis:
+          type: boolean
+          nullable: true
+        procedure_id:
+          type: string
+          format: uuid
+          nullable: true
+        image:
+          type: string
+          format: binary
+          nullable: true
+    PatchedItemRequest:
+      type: object
+      properties:
+        nom:
+          type: string
+          minLength: 1
+          maxLength: 200
+        reference:
+          type: string
+          nullable: true
+          maxLength: 100
+        description:
+          type: string
+        prix:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        unite:
+          type: string
+          maxLength: 30
+        statut:
+          $ref: '#/components/schemas/ActiveInactiveStatutEnum'
+        is_published:
+          type: boolean
+        characteristics: {}
+        category_id:
+          type: string
+          format: uuid
+          writeOnly: true
+          nullable: true
+        entretien_requis:
+          type: boolean
+          nullable: true
+        initial_quantity:
+          type: integer
+          maximum: 1000000
+          minimum: 1
+          writeOnly: true
+        procedure_id:
+          type: string
+          format: uuid
+          writeOnly: true
+          nullable: true
+    PatchedNotificationRequest:
+      type: object
+      properties:
+        lu:
+          type: boolean
+    PatchedProcedureRequest:
+      type: object
+      properties:
+        nom:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+        est_actif:
+          type: boolean
+        steps_input:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          writeOnly: true
+    PatchedRecurringTaskRequest:
+      type: object
+      description: Tâche récurrente (Sprint 3).
+      properties:
+        procedure:
+          type: string
+          format: uuid
+        frequence_jours:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Fréquence en jours (7 = hebdomadaire, 30 = mensuel)
+        prochaine_execution:
+          type: string
+          format: date
+          description: Date de la prochaine exécution prévue
+        est_actif:
+          type: boolean
+    PatchedTaskStepUpdateRequest:
+      type: object
+      properties:
+        statut:
+          $ref: '#/components/schemas/TaskStepUpdateStatutEnum'
+    PerformanceAlert:
+      type: object
+      description: Alerte de performance (Sprint 9).
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        type:
+          allOf:
+          - $ref: '#/components/schemas/PerformanceAlertTypeEnum'
+          readOnly: true
+        item_id:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        item_nom:
+          type: string
+          readOnly: true
+          nullable: true
+        seuil:
+          readOnly: true
+          description: Configuration du seuil qui a déclenché l'alerte
+        message:
+          type: string
+          readOnly: true
+        resolved:
+          type: boolean
+          readOnly: true
+        resolved_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        resolved_by:
+          allOf:
+          - $ref: '#/components/schemas/User'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - item_id
+      - item_nom
+      - message
+      - resolved
+      - resolved_at
+      - resolved_by
+      - seuil
+      - type
+    PerformanceAlertTypeEnum:
+      enum:
+      - FREQUENT_MAINTENANCE
+      - LONG_DURATION
+      - LOW_COMPLETION
+      type: string
+      description: |-
+        * `FREQUENT_MAINTENANCE` - Entretien trop fréquent
+        * `LONG_DURATION` - Durée anormale
+        * `LOW_COMPLETION` - Taux de complétion faible
+    PermissionCatalogItem:
+      type: object
+      properties:
+        codename:
+          type: string
+        libelle:
+          type: string
+        description:
+          type: string
+      required:
+      - codename
+      - description
+      - libelle
+    Procedure:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        nom:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+        est_actif:
+          type: boolean
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProcedureStep'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - nom
+      - steps
+      - updated_at
+    ProcedureRequest:
+      type: object
+      properties:
+        nom:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+        est_actif:
+          type: boolean
+        steps_input:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          writeOnly: true
+      required:
+      - nom
+    ProcedureStep:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        nom:
+          type: string
+          maxLength: 200
+        ordre:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        obligatoire:
+          type: boolean
+        type:
+          $ref: '#/components/schemas/ProcedureStepTypeEnum'
+        description:
+          type: string
+      required:
+      - id
+      - nom
+    ProcedureStepRequest:
+      type: object
+      properties:
+        nom:
+          type: string
+          minLength: 1
+          maxLength: 200
+        ordre:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        obligatoire:
+          type: boolean
+        type:
+          $ref: '#/components/schemas/ProcedureStepTypeEnum'
+        description:
+          type: string
+      required:
+      - nom
+    ProcedureStepTypeEnum:
+      enum:
+      - OPERATION
+      - CONTROLE
+      type: string
+      description: |-
+        * `OPERATION` - Opération
+        * `CONTROLE` - Contrôle
+    PublicBookingRequestCreate:
+      type: object
+      description: Création d'une demande de location par un client externe (public,
+        sans auth).
+      properties:
+        item_id:
+          type: string
+          format: uuid
+        client_nom:
+          type: string
+          maxLength: 150
+        client_telephone:
+          type: string
+          maxLength: 30
+        client_email:
+          type: string
+          format: email
+        date_debut:
+          type: string
+          format: date
+        date_fin:
+          type: string
+          format: date
+        quantite:
+          type: integer
+          minimum: 1
+          default: 1
+        message:
+          type: string
+        lieu_nom:
+          type: string
+          maxLength: 200
+        lieu_adresse:
+          type: string
+        contact_nom:
+          type: string
+          maxLength: 150
+        contact_telephone:
+          type: string
+          maxLength: 30
+        notes_livraison:
+          type: string
+        visitor_id:
+          type: string
+          maxLength: 64
+        idempotency_key:
+          type: string
+          maxLength: 100
+      required:
+      - client_email
+      - client_nom
+      - date_debut
+      - date_fin
+      - item_id
+    PublicBookingRequestCreateRequest:
+      type: object
+      description: Création d'une demande de location par un client externe (public,
+        sans auth).
+      properties:
+        item_id:
+          type: string
+          format: uuid
+        client_nom:
+          type: string
+          minLength: 1
+          maxLength: 150
+        client_telephone:
+          type: string
+          maxLength: 30
+        client_email:
+          type: string
+          format: email
+          minLength: 1
+        date_debut:
+          type: string
+          format: date
+        date_fin:
+          type: string
+          format: date
+        quantite:
+          type: integer
+          minimum: 1
+          default: 1
+        message:
+          type: string
+        lieu_nom:
+          type: string
+          maxLength: 200
+        lieu_adresse:
+          type: string
+        contact_nom:
+          type: string
+          maxLength: 150
+        contact_telephone:
+          type: string
+          maxLength: 30
+        notes_livraison:
+          type: string
+        visitor_id:
+          type: string
+          maxLength: 64
+        idempotency_key:
+          type: string
+          maxLength: 100
+      required:
+      - client_email
+      - client_nom
+      - date_debut
+      - date_fin
+      - item_id
+    PublicBookingRequestDetail:
+      type: object
+      description: Détail d'une demande pour le client (via token).
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        item_id:
+          type: string
+          format: uuid
+          readOnly: true
+        item_nom:
+          type: string
+          readOnly: true
+        item_prix:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          readOnly: true
+        item_unite:
+          type: string
+          readOnly: true
+        item_photo_url:
+          type: string
+          nullable: true
+          readOnly: true
+        client_nom:
+          type: string
+          readOnly: true
+        client_telephone:
+          type: string
+          readOnly: true
+        client_email:
+          type: string
+          format: email
+          readOnly: true
+        date_debut:
+          type: string
+          format: date
+          readOnly: true
+        date_fin:
+          type: string
+          format: date
+          readOnly: true
+        quantite:
+          type: integer
+          readOnly: true
+        message:
+          type: string
+          readOnly: true
+          description: Message du client (besoin, occasion, etc.)
+        lieu_nom:
+          type: string
+          readOnly: true
+        lieu_adresse:
+          type: string
+          readOnly: true
+        contact_nom:
+          type: string
+          readOnly: true
+        contact_telephone:
+          type: string
+          readOnly: true
+        notes_livraison:
+          type: string
+          readOnly: true
+        statut:
+          allOf:
+          - $ref: '#/components/schemas/BookingRequestStatutEnum'
+          readOnly: true
+        statut_display:
+          type: string
+          readOnly: true
+        motif_refus:
+          type: string
+          readOnly: true
+        contre_proposition:
+          readOnly: true
+          nullable: true
+          description: 'Contre-proposition : {date_debut, date_fin, quantite, prix,
+            message}'
+        peut_annuler:
+          type: boolean
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - client_email
+      - client_nom
+      - client_telephone
+      - contact_nom
+      - contact_telephone
+      - contre_proposition
+      - created_at
+      - date_debut
+      - date_fin
+      - id
+      - item_id
+      - item_nom
+      - item_photo_url
+      - item_prix
+      - item_unite
+      - lieu_adresse
+      - lieu_nom
+      - message
+      - motif_refus
+      - notes_livraison
+      - peut_annuler
+      - quantite
+      - statut
+      - statut_display
+      - updated_at
+    PublicCategory:
+      type: object
+      description: Serializer public pour les catégories (lecture seule, sans auth).
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        nom:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        image_url:
+          type: string
+          nullable: true
+          readOnly: true
+      required:
+      - description
+      - id
+      - image_url
+      - nom
+    PublicItem:
+      type: object
+      description: Serializer public pour le catalogue (lecture seule, sans auth).
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        nom:
+          type: string
+          maxLength: 200
+        reference:
+          type: string
+          nullable: true
+          maxLength: 100
+        public_description:
+          type: string
+          readOnly: true
+        prix:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        unite:
+          type: string
+          maxLength: 30
+        statut:
+          type: string
+          readOnly: true
+        is_published:
+          type: boolean
+          readOnly: true
+        photo_url:
+          type: string
+          nullable: true
+          readOnly: true
+        category_nom:
+          type: string
+          readOnly: true
+        characteristics:
+          readOnly: true
+        qr_code:
+          type: string
+          nullable: true
+          description: Code QR unique pour identification rapide (auto-généré si vide)
+          maxLength: 100
+      required:
+      - category_nom
+      - characteristics
+      - id
+      - is_published
+      - nom
+      - photo_url
+      - public_description
+      - statut
+    RecurringTask:
+      type: object
+      description: Tâche récurrente (Sprint 3).
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        item:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          readOnly: true
+        category:
+          allOf:
+          - $ref: '#/components/schemas/CategoryShort'
+          readOnly: true
+        procedure:
+          type: string
+          format: uuid
+        procedure_nom:
+          type: string
+          readOnly: true
+        frequence_jours:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Fréquence en jours (7 = hebdomadaire, 30 = mensuel)
+        prochaine_execution:
+          type: string
+          format: date
+          description: Date de la prochaine exécution prévue
+        est_actif:
+          type: boolean
+        created_by:
+          allOf:
+          - $ref: '#/components/schemas/User'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - category
+      - created_at
+      - created_by
+      - id
+      - item
+      - procedure
+      - procedure_nom
+      - prochaine_execution
+      - updated_at
+    RecurringTaskRequest:
+      type: object
+      description: Tâche récurrente (Sprint 3).
+      properties:
+        procedure:
+          type: string
+          format: uuid
+        frequence_jours:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Fréquence en jours (7 = hebdomadaire, 30 = mensuel)
+        prochaine_execution:
+          type: string
+          format: date
+          description: Date de la prochaine exécution prévue
+        est_actif:
+          type: boolean
+      required:
+      - procedure
+      - prochaine_execution
+    RegisterRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+          maxLength: 254
+        password:
+          type: string
+          writeOnly: true
+          minLength: 8
+        first_name:
+          type: string
+          title: Prénom
+          maxLength: 150
+        last_name:
+          type: string
+          title: Nom
+          maxLength: 150
+        telephone:
+          type: string
+          maxLength: 30
+      required:
+      - email
+      - password
+    RegisterResponse:
+      type: object
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+        access:
+          type: string
+        refresh:
+          type: string
+      required:
+      - access
+      - refresh
+      - user
+    Reminder:
+      type: object
+      description: Rappel programmé (Sprint 3).
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        task_id:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        item_id:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        item_nom:
+          type: string
+          readOnly: true
+          nullable: true
+        user:
+          allOf:
+          - $ref: '#/components/schemas/User'
+          readOnly: true
+        rappel_a:
+          type: string
+          format: date-time
+          readOnly: true
+          description: Date et heure du rappel
+        message:
+          type: string
+          readOnly: true
+        envoye:
+          type: boolean
+          readOnly: true
+          description: Le rappel a-t-il été envoyé
+        created_by:
+          allOf:
+          - $ref: '#/components/schemas/User'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - created_by
+      - envoye
+      - id
+      - item_id
+      - item_nom
+      - message
+      - rappel_a
+      - task_id
+      - user
+    Reservation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        item_id:
+          type: string
+          format: uuid
+          readOnly: true
+        item_nom:
+          type: string
+          readOnly: true
+        reserve_par:
+          allOf:
+          - $ref: '#/components/schemas/User'
+          readOnly: true
+        date_debut:
+          type: string
+          format: date
+          readOnly: true
+        date_fin:
+          type: string
+          format: date
+          readOnly: true
+        quantite:
+          type: integer
+          readOnly: true
+        motif:
+          type: string
+          readOnly: true
+        statut:
+          allOf:
+          - $ref: '#/components/schemas/ReservationStatutEnum'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        lieu_nom:
+          type: string
+          readOnly: true
+          description: 'Nom du lieu (ex: Salle des fêtes, Hôtel XYZ)'
+        lieu_adresse:
+          type: string
+          readOnly: true
+          description: Adresse complète de livraison/reprise
+        lieu_lat:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          readOnly: true
+          nullable: true
+          description: Latitude GPS
+        lieu_lng:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          readOnly: true
+          nullable: true
+          description: Longitude GPS
+        contact_nom:
+          type: string
+          readOnly: true
+          description: Personne contact sur place
+        contact_telephone:
+          type: string
+          readOnly: true
+          description: Téléphone contact sur place
+        livraison_prevue_le:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: Date/heure prévue de livraison
+        livraison_effectuee_le:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: Date/heure réelle de livraison
+        livreur:
+          allOf:
+          - $ref: '#/components/schemas/User'
+          readOnly: true
+        reprise_prevue_le:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: Date/heure prévue de reprise
+        reprise_effectuee_le:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: Date/heure réelle de reprise
+        reprise_par:
+          allOf:
+          - $ref: '#/components/schemas/User'
+          readOnly: true
+        statut_livraison:
+          allOf:
+          - $ref: '#/components/schemas/StatutLivraisonEnum'
+          readOnly: true
+        notes_livraison:
+          type: string
+          readOnly: true
+          description: 'Instructions : étage, code porte, accès, etc.'
+        quantite_retournee:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: Unités rendues en bon état (contrôle de retour).
+        quantite_abimee:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: Unités rendues abîmées (contrôle de retour).
+        quantite_perdue:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: Unités perdues pendant la location.
+        observations:
+          type: string
+          readOnly: true
+        retourne_le:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: Moment du retour effectif au dépôt.
+      required:
+      - contact_nom
+      - contact_telephone
+      - created_at
+      - date_debut
+      - date_fin
+      - id
+      - item_id
+      - item_nom
+      - lieu_adresse
+      - lieu_lat
+      - lieu_lng
+      - lieu_nom
+      - livraison_effectuee_le
+      - livraison_prevue_le
+      - livreur
+      - motif
+      - notes_livraison
+      - observations
+      - quantite
+      - quantite_abimee
+      - quantite_perdue
+      - quantite_retournee
+      - reprise_effectuee_le
+      - reprise_par
+      - reprise_prevue_le
+      - reserve_par
+      - retourne_le
+      - statut
+      - statut_livraison
+      - updated_at
+    ReservationBulkCreate:
+      type: object
+      description: Réservation de plusieurs articles en un seul appel atomique (US-29).
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReservationBulkItem'
+        date_debut:
+          type: string
+          format: date
+        date_fin:
+          type: string
+          format: date
+        motif:
+          type: string
+        lieu_nom:
+          type: string
+          maxLength: 200
+        lieu_adresse:
+          type: string
+        contact_nom:
+          type: string
+          maxLength: 150
+        contact_telephone:
+          type: string
+          maxLength: 30
+        livraison_prevue_le:
+          type: string
+          format: date-time
+          nullable: true
+        reprise_prevue_le:
+          type: string
+          format: date-time
+          nullable: true
+        notes_livraison:
+          type: string
+      required:
+      - date_debut
+      - date_fin
+      - items
+    ReservationBulkCreateRequest:
+      type: object
+      description: Réservation de plusieurs articles en un seul appel atomique (US-29).
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReservationBulkItemRequest'
+        date_debut:
+          type: string
+          format: date
+        date_fin:
+          type: string
+          format: date
+        motif:
+          type: string
+        lieu_nom:
+          type: string
+          maxLength: 200
+        lieu_adresse:
+          type: string
+        contact_nom:
+          type: string
+          maxLength: 150
+        contact_telephone:
+          type: string
+          maxLength: 30
+        livraison_prevue_le:
+          type: string
+          format: date-time
+          nullable: true
+        reprise_prevue_le:
+          type: string
+          format: date-time
+          nullable: true
+        notes_livraison:
+          type: string
+      required:
+      - date_debut
+      - date_fin
+      - items
+    ReservationBulkItem:
+      type: object
+      properties:
+        item_id:
+          type: string
+          format: uuid
+        quantite:
+          type: integer
+          minimum: 1
+          default: 1
+        lieu_nom:
+          type: string
+          maxLength: 200
+        lieu_adresse:
+          type: string
+        contact_nom:
+          type: string
+          maxLength: 150
+        contact_telephone:
+          type: string
+          maxLength: 30
+        notes_livraison:
+          type: string
+      required:
+      - item_id
+    ReservationBulkItemRequest:
+      type: object
+      properties:
+        item_id:
+          type: string
+          format: uuid
+        quantite:
+          type: integer
+          minimum: 1
+          default: 1
+        lieu_nom:
+          type: string
+          maxLength: 200
+        lieu_adresse:
+          type: string
+        contact_nom:
+          type: string
+          maxLength: 150
+        contact_telephone:
+          type: string
+          maxLength: 30
+        notes_livraison:
+          type: string
+      required:
+      - item_id
+    ReservationFinish:
+      type: object
+      description: Payload du contrôle de retour (Sprint 8 bis, US-31+).
+      properties:
+        quantite_retournee:
+          type: integer
+          minimum: 0
+        quantite_abimee:
+          type: integer
+          minimum: 0
+        quantite_perdue:
+          type: integer
+          minimum: 0
+        observations:
+          type: string
+    ReservationFinishRequest:
+      type: object
+      description: Payload du contrôle de retour (Sprint 8 bis, US-31+).
+      properties:
+        quantite_retournee:
+          type: integer
+          minimum: 0
+        quantite_abimee:
+          type: integer
+          minimum: 0
+        quantite_perdue:
+          type: integer
+          minimum: 0
+        observations:
+          type: string
+    ReservationStatutEnum:
+      enum:
+      - EN_ATTENTE
+      - VALIDEE
+      - EN_COURS
+      - TERMINEE
+      - ANNULEE
+      type: string
+      description: |-
+        * `EN_ATTENTE` - En attente de validation
+        * `VALIDEE` - Validée
+        * `EN_COURS` - En cours
+        * `TERMINEE` - Terminée
+        * `ANNULEE` - Annulée
+    Role:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        nom:
+          type: string
+          maxLength: 100
+        description:
+          type: string
+        is_system:
+          type: boolean
+          readOnly: true
+        permissions:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          readOnly: true
+      required:
+      - id
+      - is_system
+      - nom
+      - permissions
+    RoleRequest:
+      type: object
+      properties:
+        nom:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+      required:
+      - nom
+    SourceEnum:
+      enum:
+      - nom
+      - mots_cles
+      - champs
+      - amelioration
+      - libre
+      type: string
+      description: |-
+        * `nom` - nom
+        * `mots_cles` - mots_cles
+        * `champs` - champs
+        * `amelioration` - amelioration
+        * `libre` - libre
+    StatutLivraisonEnum:
+      enum:
+      - EN_ATTENTE
+      - LIVREE
+      - REPRISE
+      - RETOURNEE
+      type: string
+      description: |-
+        * `EN_ATTENTE` - En attente de livraison
+        * `LIVREE` - Livrée
+        * `REPRISE` - Reprise (retour client)
+        * `RETOURNEE` - Retournée au dépôt
+    StockAdjustment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        item_id:
+          type: string
+          format: uuid
+          readOnly: true
+        item_nom:
+          type: string
+          readOnly: true
+        inventory_id:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        quantite_theorique:
+          type: integer
+          readOnly: true
+        quantite_comptee:
+          type: integer
+          readOnly: true
+        ecart:
+          type: integer
+          readOnly: true
+        motif:
+          type: string
+          readOnly: true
+        reference:
+          type: string
+          readOnly: true
+        acteur:
+          allOf:
+          - $ref: '#/components/schemas/User'
+          readOnly: true
+        date:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - acteur
+      - date
+      - ecart
+      - id
+      - inventory_id
+      - item_id
+      - item_nom
+      - motif
+      - quantite_comptee
+      - quantite_theorique
+      - reference
+    StockListItem:
+      type: object
+      properties:
+        item_id:
+          type: string
+          format: uuid
+        nom:
+          type: string
+        reference:
+          type: string
+        statut:
+          type: string
+        entretien_requis:
+          type: boolean
+          nullable: true
+        etat_entretien:
+          type: object
+          additionalProperties: {}
+        a_verifier:
+          type: boolean
+        quantite_totale:
+          type: integer
+        quantite_disponible:
+          type: integer
+      required:
+      - a_verifier
+      - entretien_requis
+      - etat_entretien
+      - item_id
+      - nom
+      - quantite_disponible
+      - quantite_totale
+      - reference
+      - statut
+    StockMovement:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        type:
+          $ref: '#/components/schemas/StockMovementTypeEnum'
+        quantite:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        motif:
+          type: string
+        reference:
+          type: string
+          maxLength: 100
+        acteur:
+          allOf:
+          - $ref: '#/components/schemas/User'
+          readOnly: true
+        date:
+          type: string
+          format: date-time
+          readOnly: true
+        item_nom:
+          type: string
+          readOnly: true
+        retour_de:
+          type: string
+          format: uuid
+          readOnly: true
+      required:
+      - acteur
+      - date
+      - id
+      - item_nom
+      - quantite
+      - retour_de
+      - type
+    StockMovementRequest:
+      type: object
+      properties:
+        type:
+          $ref: '#/components/schemas/StockMovementTypeEnum'
+        quantite:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        motif:
+          type: string
+        reference:
+          type: string
+          maxLength: 100
+        item_id:
+          type: string
+          format: uuid
+          writeOnly: true
+        related_to:
+          type: string
+          format: uuid
+          writeOnly: true
+      required:
+      - item_id
+      - quantite
+      - type
+    StockMovementTypeEnum:
+      enum:
+      - ENTREE
+      - SORTIE
+      - RETOUR
+      - PERTE
+      - DOMMAGE
+      type: string
+      description: |-
+        * `ENTREE` - Entrée
+        * `SORTIE` - Sortie
+        * `RETOUR` - Retour
+        * `PERTE` - Perte
+        * `DOMMAGE` - Dommage
+    TaskComment:
+      type: object
+      description: Commentaire sur une tâche de maintenance (Sprint 1).
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        auteur:
+          allOf:
+          - $ref: '#/components/schemas/User'
+          readOnly: true
+        contenu:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - auteur
+      - contenu
+      - created_at
+      - id
+      - updated_at
+    TaskCommentRequest:
+      type: object
+      description: Commentaire sur une tâche de maintenance (Sprint 1).
+      properties:
+        contenu:
+          type: string
+          minLength: 1
+      required:
+      - contenu
+    TaskStep:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        nom:
+          type: string
+          readOnly: true
+        ordre:
+          type: integer
+          readOnly: true
+        obligatoire:
+          type: boolean
+          readOnly: true
+        type:
+          allOf:
+          - $ref: '#/components/schemas/ProcedureStepTypeEnum'
+          readOnly: true
+        statut:
+          allOf:
+          - $ref: '#/components/schemas/TaskStepStatutEnum'
+          readOnly: true
+        started_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        finished_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        done_by:
+          allOf:
+          - $ref: '#/components/schemas/User'
+          readOnly: true
+        duree_estimee:
+          type: string
+          readOnly: true
+          nullable: true
+          description: Durée estimée pour cette étape
+        duree_estimee_secondes:
+          type: integer
+          nullable: true
+          readOnly: true
+        duree_reelle:
+          type: integer
+          nullable: true
+          readOnly: true
+        photos:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          readOnly: true
+      required:
+      - done_by
+      - duree_estimee
+      - duree_estimee_secondes
+      - duree_reelle
+      - finished_at
+      - id
+      - nom
+      - obligatoire
+      - ordre
+      - photos
+      - started_at
+      - statut
+      - type
+    TaskStepPhoto:
+      type: object
+      description: Photo d'une étape de tâche (Sprint 2).
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        image:
+          type: string
+          format: uri
+        type:
+          $ref: '#/components/schemas/TaskStepPhotoTypeEnum'
+        caption:
+          type: string
+          maxLength: 150
+        uploaded_by:
+          allOf:
+          - $ref: '#/components/schemas/User'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - image
+      - type
+      - uploaded_by
+    TaskStepPhotoRequest:
+      type: object
+      description: Photo d'une étape de tâche (Sprint 2).
+      properties:
+        image:
+          type: string
+          format: binary
+        type:
+          $ref: '#/components/schemas/TaskStepPhotoTypeEnum'
+        caption:
+          type: string
+          maxLength: 150
+      required:
+      - image
+      - type
+    TaskStepPhotoTypeEnum:
+      enum:
+      - AVANT
+      - APRES
+      type: string
+      description: |-
+        * `AVANT` - Avant
+        * `APRES` - Après
+    TaskStepStatutEnum:
+      enum:
+      - EN_ATTENTE
+      - EN_COURS
+      - TERMINE
+      type: string
+      description: |-
+        * `EN_ATTENTE` - En attente
+        * `EN_COURS` - En cours
+        * `TERMINE` - Terminé
+    TaskStepUpdate:
+      type: object
+      properties:
+        statut:
+          $ref: '#/components/schemas/TaskStepUpdateStatutEnum'
+      required:
+      - statut
+    TaskStepUpdateStatutEnum:
+      enum:
+      - EN_COURS
+      - TERMINE
+      type: string
+      description: |-
+        * `EN_COURS` - EN_COURS
+        * `TERMINE` - TERMINE
+    TokenRefresh:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+      required:
+      - access
+    TokenRefreshRequest:
+      type: object
+      properties:
+        refresh:
+          type: string
+          writeOnly: true
+          minLength: 1
+      required:
+      - refresh
+    User:
+      type: object
+      description: User sérialisé avec un id string (cohérent avec les UUID du reste
+        de l'API).
+      properties:
+        id:
+          type: string
+          readOnly: true
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        first_name:
+          type: string
+          title: Prénom
+          maxLength: 150
+        last_name:
+          type: string
+          title: Nom
+          maxLength: 150
+        telephone:
+          type: string
+          maxLength: 30
+        statut:
+          $ref: '#/components/schemas/ActiveInactiveStatutEnum'
+      required:
+      - email
+      - id
+    UserRequest:
+      type: object
+      description: User sérialisé avec un id string (cohérent avec les UUID du reste
+        de l'API).
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+          maxLength: 254
+        first_name:
+          type: string
+          title: Prénom
+          maxLength: 150
+        last_name:
+          type: string
+          title: Nom
+          maxLength: 150
+        telephone:
+          type: string
+          maxLength: 30
+        statut:
+          $ref: '#/components/schemas/ActiveInactiveStatutEnum'
+      required:
+      - email
+  securitySchemes:
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

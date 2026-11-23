@@ -131,8 +131,15 @@ AUTH_USER_MODEL = "accounts.User"
 # 1,5 M d'itérations (~2 s mesurées au banc de charge). Les hachages PBKDF2
 # existants restent vérifiables et sont réécrits en Argon2 à la connexion
 # suivante de chaque utilisateur : aucune réinitialisation nécessaire.
-PASSWORD_HASHERS = [
-    "django.contrib.auth.hashers.Argon2PasswordHasher",
+try:
+    import argon2  # noqa: F401
+    HAS_ARGON2 = True
+except ImportError:
+    HAS_ARGON2 = False
+
+PASSWORD_HASHERS = (
+    ["django.contrib.auth.hashers.Argon2PasswordHasher"] if HAS_ARGON2 else []
+) + [
     "django.contrib.auth.hashers.PBKDF2PasswordHasher",
     "django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher",
     "django.contrib.auth.hashers.BCryptSHA256PasswordHasher",
@@ -330,4 +337,21 @@ SPECTACULAR_SETTINGS = {
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,
+    "PREPROCESSING_HOOKS": [
+        "accounts.spectacular_hooks.filter_api_endpoints",
+    ],
+    "ENUM_NAME_OVERRIDES": {
+        "ActiveInactiveStatutEnum": "accounts.models.Item.Statut",
+        "MaintenanceTaskStatutEnum": "accounts.models.MaintenanceTask.Statut",
+        "TaskStepStatutEnum": "accounts.models.TaskStep.Statut",
+        "ReservationStatutEnum": "accounts.models.Reservation.Statut",
+        "InventoryStatutEnum": "accounts.models.Inventory.Statut",
+        "BookingRequestStatutEnum": "accounts.models.BookingRequest.Statut",
+        "InvoiceStatutEnum": "accounts.models.Invoice.Statut",
+        "StockMovementTypeEnum": "accounts.models.StockMovement.Type",
+        "ProcedureStepTypeEnum": "accounts.models.ProcedureStep.Type",
+        "TaskStepPhotoTypeEnum": "accounts.models.TaskStepPhoto.Type",
+        "PerformanceAlertTypeEnum": "accounts.models.PerformanceAlert.Type",
+        "InvoiceTypeEnum": "accounts.models.Invoice.Type",
+    },
 }
