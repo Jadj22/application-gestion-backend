@@ -19,7 +19,7 @@ Content-Type: application/json
 
 
 ####
-GET https://dodome-backend.onrender.com/api/public/b/bleulight-event-3e88f4/items/048bde6e-371b-464c-a4e0-ea920f2389fa/recommendations/?type=complementary
+GET https://application-gestion-backend.onrender.com/api/public/b/bleulight-event-3e88f4/items/048bde6e-371b-464c-a4e0-ea920f2389fa/recommendations/?type=complementary
 
 ---
 

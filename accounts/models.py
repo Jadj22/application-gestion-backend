@@ -92,7 +92,7 @@ class Business(models.Model):
     adresse = models.CharField(max_length=255, blank=True)
     telephone = models.CharField(max_length=30, blank=True)
     email = models.EmailField(blank=True)
-    logo_url = models.URLField(blank=True)
+    logo_url = models.URLField(max_length=1000, blank=True)
     logo = models.ImageField(upload_to="businesses/logos/", blank=True, null=True)
     created_by = models.ForeignKey(
         User, on_delete=models.PROTECT, related_name="created_businesses"

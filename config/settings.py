@@ -270,7 +270,7 @@ CSRF_TRUSTED_ORIGINS = [
     origin.strip()
     for origin in os.getenv(
         "CSRF_TRUSTED_ORIGINS",
-        "http://localhost:3000,http://127.0.0.1:3000,https://application-gestion-backend.onrender.com,https://dodome-backend.onrender.com,https://jadj22-dashboard-admin-dodome.vercel.app,https://app.dodome.app",
+        "http://localhost:3000,http://127.0.0.1:3000,https://application-gestion-backend.onrender.com,https://application-gestion-backend.onrender.com,https://jadj22-dashboard-admin-dodome.vercel.app,https://app.dodome.app",
     ).split(",")
     if origin.strip()
 ]

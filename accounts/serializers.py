@@ -180,7 +180,7 @@ class ImageDescriptionSerializer(serializers.Serializer):
 
 
 class BusinessSerializer(serializers.ModelSerializer):
-    logoUrl = serializers.URLField(source="logo_url", required=False, allow_blank=True)
+    logoUrl = serializers.URLField(source="logo_url", max_length=1000, required=False, allow_blank=True)
     logo = serializers.ImageField(write_only=True, required=False, allow_null=True)
 
     class Meta:
@@ -192,11 +192,14 @@ class BusinessSerializer(serializers.ModelSerializer):
         if not logo:
             return instance
         # 1) Le fichier est stocké (nom final généré par pre_save),
-        # 2) logo_url pointe alors vers l'URL servie (/media/...).
+        # 2) logo_url pointe alors vers l'URL servie (S3 / Neon Storage).
         instance.logo = logo
         instance.save(update_fields=["logo"])
-        instance.logo_url = instance.logo.url
-        instance.save(update_fields=["logo_url"])
+        try:
+            instance.logo_url = instance.logo.url
+            instance.save(update_fields=["logo_url"])
+        except Exception as exc:
+            logger.warning("Impossible de générer/enregistrer logo_url: %s", exc)
         return instance
 
     def create(self, validated_data):
