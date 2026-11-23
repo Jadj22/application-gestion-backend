@@ -49,5 +49,6 @@ urlpatterns = [
     ),
 ]
 
-if settings.DEBUG:
+# Médias locaux uniquement (pas avec Neon Object Storage / S3).
+if settings.DEBUG and getattr(settings, "MEDIA_ROOT", None):
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -13,11 +13,22 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
-# Cloudinary - stockage des fichiers médias
-CLOUDINARY_URL = os.getenv("CLOUDINARY_URL")
+# Neon Object Storage (S3-compatible) — fichiers médias
+AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
+AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
+AWS_STORAGE_BUCKET_NAME = os.getenv("AWS_STORAGE_BUCKET_NAME", "assets")
+AWS_S3_ENDPOINT_URL = os.getenv("AWS_ENDPOINT_URL_S3") or os.getenv("AWS_S3_ENDPOINT_URL")
+AWS_S3_REGION_NAME = os.getenv("AWS_REGION", "us-east-2")
+AWS_S3_ADDRESSING_STYLE = "path"  # Neon exige path-style
+AWS_S3_SIGNATURE_VERSION = "s3v4"
+AWS_DEFAULT_ACL = None
+AWS_QUERYSTRING_AUTH = True  # bucket privé → URLs présignées
+AWS_S3_FILE_OVERWRITE = False
 
-if not CLOUDINARY_URL:
-    raise RuntimeError("CLOUDINARY_URL must be set")
+if not all([AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_S3_ENDPOINT_URL]):
+    raise RuntimeError(
+        "AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY et AWS_ENDPOINT_URL_S3 doivent être définis"
+    )
 
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
 
@@ -51,8 +62,7 @@ INSTALLED_APPS = [
     "corsheaders",
     "drf_spectacular",
     "accounts",
-    "cloudinary",
-    "cloudinary_storage",
+    "storages",
 ]
 
 MIDDLEWARE = [
@@ -178,15 +188,12 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 DATA_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = 6 * 1024 * 1024
 
-# Fichiers uploadés (photos d'articles, S 2-03)
-# MEDIA_URL = "/media/"
-# MEDIA_ROOT = BASE_DIR / "media"
-
-
+# Fichiers uploadés (photos d'articles) → Neon Object Storage via django-storages
+MEDIA_URL = f"{AWS_S3_ENDPOINT_URL.rstrip('/')}/{AWS_STORAGE_BUCKET_NAME}/"
 
 STORAGES = {
     "default": {
-        "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage",
+        "BACKEND": "storages.backends.s3.S3Storage",
     },
     "staticfiles": {
         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
