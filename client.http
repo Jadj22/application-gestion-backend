@@ -154,3 +154,7 @@ GET {{baseUrl}}/public/b/{{slug}}/invoices/{{reservation_id}}/pdf/
 @item_id = UUID_DE_L_ARTICLE
 @reservation_id = UUID_DE_LA_RESERVATION
 @token = TOKEN_DE_LA_DEMANDE
+
+
+###
+curl -I https://application-gestion-backend.onrender.com/health/

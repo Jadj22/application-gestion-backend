@@ -108,7 +108,12 @@ from .serializers import (
     InvoiceSerializer,
     InvoiceCreateSerializer,
     InvoicePublicSerializer,
+    PermissionCatalogItemSerializer,
+    StockListItemSerializer,
+    ItemStockDetailSerializer,
+    DashboardSummarySerializer,
 )
+from drf_spectacular.utils import extend_schema, inline_serializer
 from .fiabilite import (
     a_verifier,
     a_verifier_bulk,
@@ -179,8 +184,19 @@ class WriteThrottleMixin:
 
 class RegisterView(AuthThrottleMixin, APIView):
     permission_classes = [AllowAny]
-    serializer_class = UserSerializer
+    serializer_class = RegisterSerializer
 
+    @extend_schema(
+        request=RegisterSerializer,
+        responses={201: inline_serializer(
+            name="RegisterResponse",
+            fields={
+                "user": UserSerializer(),
+                "access": serializers.CharField(),
+                "refresh": serializers.CharField(),
+            }
+        )}
+    )
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -1052,7 +1068,7 @@ class RoleDetailView(APIView):
 
 
 class PermissionCatalogView(APIView):
-    serializer_class = serializers.Serializer
+    serializer_class = PermissionCatalogItemSerializer
 
     def get(self, request):
         permissions = [
@@ -1350,7 +1366,7 @@ class StockListView(APIView):
     """Stock courant de tous les articles, avec états calculés (S 3-03)."""
 
     permission_classes = [HasBusinessPermission.require(Perm.STOCK_VIEW)]
-    serializer_class = serializers.Serializer
+    serializer_class = StockListItemSerializer
 
     def get(self, request, business_id):
         qs = request.business.items.select_related("category")
@@ -1394,7 +1410,7 @@ class ItemStockView(APIView):
     """Stock d'un article + mouvements récents (fiche stock, S 3-03/04)."""
 
     permission_classes = [HasBusinessPermission.require(Perm.STOCK_VIEW)]
-    serializer_class = serializers.Serializer
+    serializer_class = ItemStockDetailSerializer
 
     def get(self, request, business_id, item_id):
         item = request.business.items.filter(id=item_id).first()
@@ -2801,7 +2817,7 @@ class DashboardView(APIView):
     """Synthèse du business pour le tableau de bord (S 7-04, RM-20)."""
 
     permission_classes = [HasBusinessPermission.require(Perm.STOCK_VIEW)]
-    serializer_class = serializers.Serializer
+    serializer_class = DashboardSummarySerializer
 
     def get(self, request, business_id):
         business = request.business

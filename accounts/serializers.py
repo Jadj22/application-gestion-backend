@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
@@ -75,11 +76,13 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         password = validated_data.pop("password")
-        email = validated_data["email"]
-        user = User(username=email, **validated_data)
-        user.set_password(password)
-        user.save()
-        return user
+        email = validated_data.pop("email")
+        try:
+            return User.objects.create_user(email=email, password=password, **validated_data)
+        except IntegrityError:
+            raise serializers.ValidationError(
+                {"email": ["Un compte utilisateur avec cette adresse email existe déjà."]}
+            )
 
 
 class LoginSerializer(TokenObtainPairSerializer):
@@ -220,7 +223,7 @@ class RoleSerializer(serializers.ModelSerializer):
         fields = ["id", "nom", "description", "is_system", "permissions"]
         read_only_fields = ["id", "is_system"]
 
-    def get_permissions(self, obj):
+    def get_permissions(self, obj) -> list[dict]:
         return [
             {"codename": p.codename, "libelle": p.libelle}
             for p in obj.permissions.order_by("codename")
@@ -341,13 +344,13 @@ class CategorySerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "created_at", "updated_at", "image_url"]
 
-    def get_item_count(self, obj):
+    def get_item_count(self, obj) -> int:
         cached = getattr(obj, "item_count", None)
         if cached is not None:
             return cached
         return obj.items.count()
 
-    def get_image_url(self, obj):
+    def get_image_url(self, obj) -> str | None:
         if not obj.image:
             return None
         request = self.context.get("request")
@@ -395,7 +398,7 @@ class PublicCategorySerializer(serializers.ModelSerializer):
         fields = ["id", "nom", "description", "image_url"]
         read_only_fields = fields
 
-    def get_image_url(self, obj):
+    def get_image_url(self, obj) -> str | None:
         if not obj.image:
             return None
         request = self.context.get("request")
@@ -445,13 +448,13 @@ class ItemSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
 
-    def get_etat_entretien(self, obj):
+    def get_etat_entretien(self, obj) -> dict:
         etats = self.context.get("etats")
         if etats and obj.id in etats:
             return etats[obj.id]
         return etat_entretien(obj)
 
-    def get_a_verifier(self, obj):
+    def get_a_verifier(self, obj) -> bool:
         flags = self.context.get("a_verifier")
         if flags and obj.id in flags:
             return flags[obj.id]
@@ -708,7 +711,7 @@ class InventorySerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "statut", "created_at", "closed_at"]
 
-    def get_avancement(self, obj):
+    def get_avancement(self, obj) -> float:
         total = obj.business.items.count()
         return progress(obj, total)
 
@@ -791,18 +794,18 @@ class TaskStepSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
-    def get_duree_reelle(self, obj):
+    def get_duree_reelle(self, obj) -> int | None:
         duree = obj.duree_reelle
         if duree:
             return int(duree.total_seconds())
         return None
 
-    def get_duree_estimee_secondes(self, obj):
+    def get_duree_estimee_secondes(self, obj) -> int | None:
         if obj.duree_estimee:
             return int(obj.duree_estimee.total_seconds())
         return None
 
-    def get_photos(self, obj):
+    def get_photos(self, obj) -> list[dict]:
         return TaskStepPhotoSerializer(obj.photos.all(), many=True).data
 
 
@@ -842,27 +845,27 @@ class MaintenanceTaskSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
-    def get_etapes(self, obj):
+    def get_etapes(self, obj) -> dict:
         from .maintenance import progress
 
         return progress(obj)
 
-    def get_etat_article(self, obj):
+    def get_etat_article(self, obj) -> dict:
         etats = self.context.get("etats")
         if etats and obj.item_id in etats:
             return etats[obj.item_id]
         return etat_entretien(obj.item)
 
-    def get_cout_total(self, obj):
+    def get_cout_total(self, obj) -> float | None:
         main_oeuvre = obj.cout_main_oeuvre or 0
         materiel = obj.cout_materiel or 0
         total = main_oeuvre + materiel
         return float(total) if total > 0 else None
 
-    def get_comments_count(self, obj):
+    def get_comments_count(self, obj) -> int:
         return obj.comments.count()
 
-    def get_duree_totale(self, obj):
+    def get_duree_totale(self, obj) -> int | None:
         total_seconds = 0
         for step in obj.steps.all():
             duree = step.duree_reelle
@@ -1221,13 +1224,13 @@ class PublicBookingRequestDetailSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
-    def get_item_photo_url(self, obj):
+    def get_item_photo_url(self, obj) -> str | None:
         request = self.context.get("request")
         if obj.item.photos.exists():
             return request.build_absolute_uri(obj.item.photos.first().image.url)
         return None
 
-    def get_peut_annuler(self, obj):
+    def get_peut_annuler(self, obj) -> bool:
         return obj.can_client_cancel
 
 
@@ -1405,7 +1408,7 @@ class RecurringTaskSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "created_by", "created_at", "updated_at"]
 
-    def get_item(self, obj):
+    def get_item(self, obj) -> dict | None:
         if obj.item:
             return {"id": str(obj.item.id), "nom": obj.item.nom}
         return None
@@ -1599,14 +1602,14 @@ class PublicItemSerializer(serializers.ModelSerializer):
             "qr_code",
         ]
 
-    def get_public_description(self, obj):
+    def get_public_description(self, obj) -> str:
         # Fallback: si public_description vide, exposer description interne
         # pour ne pas afficher une section vide côté client.
         if obj.public_description and obj.public_description.strip():
             return obj.public_description
         return obj.description or ""
 
-    def get_photo_url(self, obj):
+    def get_photo_url(self, obj) -> str | None:
         request = self.context.get("request")
         if obj.photos.exists():
             return request.build_absolute_uri(obj.photos.first().image.url)
@@ -1659,7 +1662,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
-    def get_pdf_url(self, obj):
+    def get_pdf_url(self, obj) -> str | None:
         request = self.context.get("request")
         if obj.pdf:
             return request.build_absolute_uri(obj.pdf.url)
@@ -1704,8 +1707,46 @@ class InvoicePublicSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
-    def get_pdf_url(self, obj):
+    def get_pdf_url(self, obj) -> str | None:
         request = self.context.get("request")
         if obj.pdf:
             return request.build_absolute_uri(obj.pdf.url)
         return None
+
+
+# --- OpenAPI Schemas pour vues personnalisées (APIView) -----------------------
+
+
+class PermissionCatalogItemSerializer(serializers.Serializer):
+    codename = serializers.CharField()
+    libelle = serializers.CharField()
+    description = serializers.CharField()
+
+
+class StockListItemSerializer(serializers.Serializer):
+    item_id = serializers.UUIDField()
+    nom = serializers.CharField()
+    reference = serializers.CharField()
+    statut = serializers.CharField()
+    entretien_requis = serializers.BooleanField(allow_null=True)
+    etat_entretien = serializers.DictField()
+    a_verifier = serializers.BooleanField()
+    quantite_totale = serializers.IntegerField()
+    quantite_disponible = serializers.IntegerField()
+
+
+class ItemStockDetailSerializer(serializers.Serializer):
+    item = serializers.DictField()
+    stock = serializers.DictField()
+    mouvements = serializers.ListField()
+
+
+class DashboardSummarySerializer(serializers.Serializer):
+    total_articles = serializers.IntegerField()
+    articles_en_service = serializers.IntegerField()
+    articles_en_maintenance = serializers.IntegerField()
+    articles_en_retard = serializers.IntegerField()
+    disponibilite_globale = serializers.FloatField()
+    alertes_actives = serializers.IntegerField()
+    taches_en_cours = serializers.IntegerField()
+    reservations_en_cours = serializers.IntegerField()
