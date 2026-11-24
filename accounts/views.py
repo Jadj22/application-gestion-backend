@@ -375,23 +375,27 @@ class BusinessListCreateView(WriteThrottleMixin, APIView):
     def post(self, request):
         serializer = BusinessSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        with transaction.atomic():
-            business = serializer.save(created_by=request.user)
-            roles = seed_default_roles(business)
-            seed_business_rules(business)
-            BusinessMember.objects.create(
+        try:
+            with transaction.atomic():
+                business = serializer.save(created_by=request.user)
+                roles = seed_default_roles(business)
+                seed_business_rules(business)
+                BusinessMember.objects.create(
+                    business=business,
+                    user=request.user,
+                    role=roles[RoleNom.OWNER],
+                    statut=BusinessMember.Statut.ACTIF,
+                )
+            log_activity(
                 business=business,
-                user=request.user,
-                role=roles[RoleNom.OWNER],
-                statut=BusinessMember.Statut.ACTIF,
+                acteur=request.user,
+                action=Act.BUSINESS_CREATE,
+                cible=business.nom,
             )
-        log_activity(
-            business=business,
-            acteur=request.user,
-            action=Act.BUSINESS_CREATE,
-            cible=business.nom,
-        )
-        return Response(BusinessSerializer(business).data, status=status.HTTP_201_CREATED)
+            return Response(BusinessSerializer(business).data, status=status.HTTP_201_CREATED)
+        except Exception as exc:
+            logger.exception("Échec création business par %s: %s", request.user, exc)
+            raise
 
 
 class BusinessContextView(APIView):

@@ -191,15 +191,15 @@ class BusinessSerializer(serializers.ModelSerializer):
     def _apply_logo(self, instance, logo):
         if not logo:
             return instance
-        # 1) Le fichier est stocké (nom final généré par pre_save),
-        # 2) logo_url pointe alors vers l'URL servie (S3 / Neon Storage).
-        instance.logo = logo
-        instance.save(update_fields=["logo"])
         try:
+            # 1) Le fichier est stocké sur S3 / Neon Storage
+            instance.logo = logo
+            instance.save(update_fields=["logo"])
+            # 2) logo_url pointe vers l'URL publique ou présignée
             instance.logo_url = instance.logo.url
             instance.save(update_fields=["logo_url"])
         except Exception as exc:
-            logger.warning("Impossible de générer/enregistrer logo_url: %s", exc)
+            logger.exception("Impossible d'enregistrer le logo pour le business %s: %s", instance.id, exc)
         return instance
 
     def create(self, validated_data):
