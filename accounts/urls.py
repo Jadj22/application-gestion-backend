@@ -33,6 +33,7 @@ from .views import (
     InvitationAcceptView,
     InvitationPreviewView,
     InvitationValidateView,
+    InvoiceCancelView,
     InvoiceDetailView,
     InvoiceListCreateView,
     InvoiceMarkPaidView,
@@ -581,6 +582,11 @@ urlpatterns = [
         "businesses/<uuid:business_id>/invoices/<uuid:invoice_id>/mark-paid/",
         InvoiceMarkPaidView.as_view(),
         name="invoice-mark-paid",
+    ),
+    path(
+        "businesses/<uuid:business_id>/invoices/<uuid:invoice_id>/cancel/",
+        InvoiceCancelView.as_view(),
+        name="invoice-cancel",
     ),
     # Public Invoice (Client)
     path(

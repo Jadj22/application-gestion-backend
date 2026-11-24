@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError
 from rest_framework import serializers
@@ -15,6 +17,7 @@ from .models import (
     Category,
     DecisionLog,
     Invoice,
+    InvoiceLine,
     Inventory,
     InventoryCount,
     Item,
@@ -182,10 +185,15 @@ class ImageDescriptionSerializer(serializers.Serializer):
 class BusinessSerializer(serializers.ModelSerializer):
     logoUrl = serializers.URLField(source="logo_url", max_length=1000, required=False, allow_blank=True)
     logo = serializers.ImageField(write_only=True, required=False, allow_null=True)
+    cachet = serializers.ImageField(write_only=True, required=False, allow_null=True)
 
     class Meta:
         model = Business
-        fields = ["id", "nom", "slug", "business_type", "adresse", "telephone", "email", "logoUrl", "logo", "created_at"]
+        fields = [
+            "id", "nom", "slug", "business_type", "adresse", "telephone", "email",
+            "logoUrl", "logo", "rccm", "nif", "tpu", "cnss", "cachet",
+            "signature_nom", "signature_titre", "created_at",
+        ]
         read_only_fields = ["id", "slug", "created_at"]
 
     def _apply_logo(self, instance, logo):
@@ -1644,12 +1652,31 @@ class PublicBusinessSerializer(serializers.ModelSerializer):
 # --- V4 : Facturation ---------------------------------------------------------
 
 
+class InvoiceLineSerializer(serializers.ModelSerializer):
+    image_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = InvoiceLine
+        fields = [
+            "id", "description", "type_ligne", "quantite",
+            "prix_unitaire", "total", "image", "image_url", "ordre",
+        ]
+        read_only_fields = ["id", "total", "image_url"]
+
+    def get_image_url(self, obj) -> str | None:
+        if not obj.image:
+            return None
+        request = self.context.get("request")
+        return request.build_absolute_uri(obj.image.url) if request else obj.image.url
+
+
 class InvoiceSerializer(serializers.ModelSerializer):
     """Serializer pour les factures (équipe)."""
 
     reservation_id = serializers.UUIDField(source="reservation.id", read_only=True)
     item_nom = serializers.CharField(source="reservation.item.nom", read_only=True)
     pdf_url = serializers.SerializerMethodField()
+    invoice_lines = InvoiceLineSerializer(many=True, read_only=True)
     generee_par = UserSerializer(read_only=True)
     statut_display = serializers.CharField(source="get_statut_display", read_only=True)
     type_display = serializers.CharField(source="get_type_display", read_only=True)
@@ -1660,7 +1687,9 @@ class InvoiceSerializer(serializers.ModelSerializer):
             "id", "numero", "type", "type_display", "statut", "statut_display",
             "reservation_id", "item_nom",
             "client_nom", "client_email", "client_telephone", "client_adresse",
-            "lignes", "sous_total", "tva_taux", "tva_montant", "total_ttc",
+            "lignes", "invoice_lines", "sous_total", "tva_taux",
+            "tva_montant", "total_ttc", "notes",
+            "motif_annulation", "date_annulation",
             "pdf_url", "generee_le", "envoyee_le", "payee_le", "generee_par",
         ]
         read_only_fields = fields
@@ -1678,6 +1707,7 @@ class InvoiceCreateSerializer(serializers.Serializer):
     reservation_id = serializers.UUIDField()
     type = serializers.ChoiceField(choices=Invoice.Type.choices, default=Invoice.Type.PROFORMA)
     tva_taux = serializers.DecimalField(max_digits=4, decimal_places=2, default=0)
+    notes = serializers.CharField(required=False, allow_blank=True, default="")
     lignes = serializers.ListField(
         child=serializers.DictField(), required=False,
         help_text="[{description, quantite, prix_unitaire}] - auto-rempli depuis réservation si vide"
@@ -1688,9 +1718,23 @@ class InvoiceCreateSerializer(serializers.Serializer):
         reservation = Reservation.objects.filter(id=value, business=business).first()
         if reservation is None:
             raise serializers.ValidationError("Réservation introuvable.")
-        if hasattr(reservation, "invoice"):
+        if reservation.invoices.exclude(statut=Invoice.Statut.ANNULEE).exists():
             raise serializers.ValidationError("Cette réservation a déjà une facture.")
         return reservation
+
+
+class InvoiceUpdateSerializer(serializers.Serializer):
+    tva_taux = serializers.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        required=False,
+        min_value=Decimal("0"),
+    )
+    notes = serializers.CharField(required=False, allow_blank=True)
+    lignes = serializers.ListField(
+        child=serializers.DictField(),
+        required=False,
+    )
 
 
 class InvoicePublicSerializer(serializers.ModelSerializer):
@@ -1706,6 +1750,7 @@ class InvoicePublicSerializer(serializers.ModelSerializer):
             "client_nom", "client_email",
             "item_nom",
             "lignes", "sous_total", "tva_taux", "tva_montant", "total_ttc",
+            "notes", "motif_annulation", "date_annulation",
             "pdf_url", "generee_le",
         ]
         read_only_fields = fields

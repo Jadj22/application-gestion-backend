@@ -1,4 +1,6 @@
 import logging
+import json
+from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -26,6 +28,7 @@ from .models import (
     Category,
     DecisionLog,
     Invoice,
+    InvoiceLine,
     Inventory,
     InventoryCount,
     Item,
@@ -107,6 +110,7 @@ from .serializers import (
     UserSerializer,
     InvoiceSerializer,
     InvoiceCreateSerializer,
+    InvoiceUpdateSerializer,
     InvoicePublicSerializer,
     PermissionCatalogItemSerializer,
     StockListItemSerializer,
@@ -4305,6 +4309,101 @@ class BookingRequestActionView(WriteThrottleMixin, APIView):
 # --- V4 : Facturation ---------------------------------------------------------
 
 
+def _parse_invoice_lines(raw):
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except json.JSONDecodeError:
+            return None
+    if not isinstance(raw, list):
+        return None
+
+    normalized = []
+    for index, row in enumerate(raw):
+        if not isinstance(row, dict):
+            return None
+        line_type = row.get("type_ligne", "article")
+        if line_type not in ("article", "forfait"):
+            line_type = "article"
+        description = str(row.get("description") or row.get("libelle") or "").strip()
+        if not description:
+            return None
+        if line_type == "forfait":
+            try:
+                montant = Decimal(str(row.get("total") or row.get("montant") or 0)).quantize(Decimal("1"))
+            except (InvalidOperation, TypeError):
+                return None
+            normalized.append({
+                "description": description,
+                "type_ligne": "forfait",
+                "quantite": None,
+                "prix_unitaire": None,
+                "total": montant,
+                "image_index": row.get("image_index"),
+                "existing_id": row.get("id"),
+                "ordre": index,
+            })
+        else:
+            try:
+                quantite = int(row.get("quantite") or 1)
+                prix = Decimal(str(row.get("prix_unitaire") or row.get("prix") or 0)).quantize(Decimal("1"))
+            except (InvalidOperation, TypeError, ValueError):
+                return None
+            if quantite < 1:
+                return None
+            normalized.append({
+                "description": description,
+                "type_ligne": "article",
+                "quantite": quantite,
+                "prix_unitaire": prix,
+                "total": (Decimal(quantite) * prix).quantize(Decimal("1")),
+                "image_index": row.get("image_index"),
+                "existing_id": row.get("id"),
+                "ordre": index,
+            })
+    return normalized
+
+
+def _replace_invoice_lines(invoice, normalized_lines, files):
+    existing_images = {
+        str(line.id): line.image
+        for line in invoice.invoice_lines.all()
+    }
+    invoice.invoice_lines.all().delete()
+
+    json_lines = []
+    for line in normalized_lines:
+        image = None
+        image_index = line.get("image_index")
+        if image_index is not None:
+            image = files.get(f"image_{image_index}")
+        if image is None and line.get("existing_id"):
+            image = existing_images.get(str(line["existing_id"]))
+
+        invoice_line = InvoiceLine(
+            invoice=invoice,
+            description=line["description"],
+            type_ligne=line["type_ligne"],
+            quantite=line["quantite"],
+            prix_unitaire=line["prix_unitaire"],
+            total=line["total"],
+            image=image,
+            ordre=line["ordre"],
+        )
+        invoice_line.save()
+        json_lines.append({
+            "description": line["description"],
+            "type_ligne": line["type_ligne"],
+            "quantite": line["quantite"],
+            "prix_unitaire": str(line["prix_unitaire"] or 0),
+            "total": str(line["total"]),
+        })
+    invoice.lignes = json_lines
+    invoice.save(update_fields=["lignes"])
+    invoice.calculer_montants()
+    invoice.save(update_fields=["sous_total", "tva_montant", "total_ttc"])
+
+
 class InvoiceListCreateView(APIView):
     """Liste et création des factures du business.
 
@@ -4333,7 +4432,10 @@ class InvoiceListCreateView(APIView):
         return paginated(request, qs, InvoiceSerializer)
 
     def post(self, request, business_id):
-        serializer = InvoiceCreateSerializer(data=request.data, context={"business": request.business})
+        payload = request.data.copy()
+        if isinstance(payload.get("lignes"), str):
+            payload["lignes"] = json.loads(payload["lignes"]) if payload["lignes"].strip().startswith("[") else []
+        serializer = InvoiceCreateSerializer(data=payload, context={"business": request.business})
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
@@ -4341,9 +4443,13 @@ class InvoiceListCreateView(APIView):
         type_facture = data["type"]
         tva_taux = data["tva_taux"]
         lignes_input = data.get("lignes")
+        notes = data.get("notes", "")
 
         # Vérifier qu'aucune facture n'existe déjà
-        if hasattr(reservation, "invoice"):
+        existing_active = reservation.invoices.exclude(
+            statut=Invoice.Statut.ANNULEE
+        ).first()
+        if existing_active is not None:
             return Response(
                 {"detail": "Cette réservation a déjà une facture."},
                 status=status.HTTP_409_CONFLICT,
@@ -4353,23 +4459,30 @@ class InvoiceListCreateView(APIView):
         if not lignes_input:
             lignes = [{
                 "description": f"Location {reservation.item.nom} ({reservation.date_debut} au {reservation.date_fin})",
+                "type_ligne": "article",
                 "quantite": reservation.quantite,
                 "prix_unitaire": str(reservation.item.prix),
                 "total": str(reservation.item.prix * reservation.quantite),
             }]
-            # Ajouter frais de livraison si notes_livraison
             if reservation.lieu_nom or reservation.lieu_adresse:
                 lignes.append({
                     "description": f"Livraison / Reprise : {reservation.lieu_nom or ''} {reservation.lieu_adresse or ''}".strip(),
-                    "quantite": 1,
-                    "prix_unitaire": "0.00",
-                    "total": "0.00",
+                    "type_ligne": "forfait",
+                    "quantite": None,
+                    "prix_unitaire": None,
+                    "total": "0",
                 })
         else:
             lignes = lignes_input
 
+        normalized_lines = _parse_invoice_lines(lignes)
+        if normalized_lines is None:
+            return Response(
+                {"detail": "Format des lignes de facture invalide."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         # Créer la facture — gère idempotence et race sur le numéro
-        from decimal import Decimal
         from django.db import IntegrityError, transaction
 
         # Idempotence : si la réservation a déjà une facture (concurrent), renvoyer l'existante
@@ -4378,8 +4491,10 @@ class InvoiceListCreateView(APIView):
             with transaction.atomic():
                 # Revérifie à l'intérieur de la transaction (verrou)
                 reservation.refresh_from_db()
-                if hasattr(reservation, "invoice") and reservation.invoice is not None:
-                    existing = reservation.invoice
+                existing = reservation.invoices.exclude(
+                    statut=Invoice.Statut.ANNULEE
+                ).first()
+                if existing is not None:
                     return Response(
                         InvoiceSerializer(existing, context={"request": request}).data,
                         status=status.HTTP_200_OK,
@@ -4390,13 +4505,14 @@ class InvoiceListCreateView(APIView):
                     type=type_facture,
                     tva_taux=tva_taux,
                     lignes=lignes,
+                    notes=notes,
                     client_nom=reservation.contact_nom or reservation.reserve_par.get_full_name() or reservation.reserve_par.email,
                     client_email=reservation.reserve_par.email,
                     client_telephone=reservation.contact_telephone or reservation.reserve_par.telephone,
                     client_adresse=reservation.lieu_adresse or "",
                     generee_par=request.user,
                 )
-                invoice.calculer_montants()
+                _replace_invoice_lines(invoice, normalized_lines, request.FILES)
                 invoice.statut = Invoice.Statut.PROFORMA if type_facture == Invoice.Type.PROFORMA else Invoice.Statut.DEFINITIVE
                 invoice.save()
         except IntegrityError as e:
@@ -4404,9 +4520,12 @@ class InvoiceListCreateView(APIView):
             # On tente de retourner la facture existante si elle a été créée entre-temps
             try:
                 reservation.refresh_from_db()
-                if hasattr(reservation, "invoice") and reservation.invoice is not None:
+                existing = reservation.invoices.exclude(
+                    statut=Invoice.Statut.ANNULEE
+                ).first()
+                if existing is not None:
                     return Response(
-                        InvoiceSerializer(reservation.invoice, context={"request": request}).data,
+                        InvoiceSerializer(existing, context={"request": request}).data,
                         status=status.HTTP_200_OK,
                     )
                 # Si c'est un conflit de numéro, on retente une fois avec un nouveau numéro
@@ -4448,10 +4567,16 @@ class InvoiceDetailView(APIView):
     """Détail d'une facture.
 
     GET /api/businesses/<uuid:business_id>/invoices/<uuid:invoice_id>/
+    PATCH/PUT modification des lignes.
     """
 
     permission_classes = [HasBusinessPermission.require(Perm.CATALOG_VIEW)]
     serializer_class = InvoiceSerializer
+
+    def get_permissions(self):
+        if self.request.method in ("PUT", "PATCH"):
+            return [HasBusinessPermission.require(Perm.RESERVATION_MANAGE)()]
+        return [HasBusinessPermission.require(Perm.CATALOG_VIEW)()]
 
     def get(self, request, business_id, invoice_id):
         invoice = request.business.invoices.filter(id=invoice_id).first()
@@ -4462,6 +4587,62 @@ class InvoiceDetailView(APIView):
             )
         serializer = InvoiceSerializer(invoice, context={"request": request})
         return Response(serializer.data)
+
+    def put(self, request, business_id, invoice_id):
+        return self._update(request, business_id, invoice_id)
+
+    def patch(self, request, business_id, invoice_id):
+        return self._update(request, business_id, invoice_id)
+
+    def _update(self, request, business_id, invoice_id):
+        invoice = request.business.invoices.filter(id=invoice_id).first()
+        if invoice is None:
+            return Response(
+                {"detail": "Facture introuvable."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        if invoice.statut not in (
+            Invoice.Statut.BROUILLON,
+            Invoice.Statut.PROFORMA,
+        ):
+            return Response(
+                {"detail": "Cette facture ne peut plus être modifiée."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        payload = request.data.copy()
+        if isinstance(payload.get("lignes"), str):
+            payload["lignes"] = json.loads(payload["lignes"]) if payload["lignes"].strip().startswith("[") else []
+        serializer = InvoiceUpdateSerializer(data=payload, partial=request.method == "PATCH")
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        if "tva_taux" in data:
+            invoice.tva_taux = data["tva_taux"]
+        if "notes" in data:
+            invoice.notes = data["notes"]
+
+        if "lignes" in data:
+            normalized_lines = _parse_invoice_lines(data["lignes"])
+            if normalized_lines is None:
+                return Response(
+                    {"detail": "Format des lignes de facture invalide."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            _replace_invoice_lines(invoice, normalized_lines, request.FILES)
+
+        invoice.save(update_fields=[
+            "tva_taux",
+            "notes",
+            "sous_total",
+            "tva_montant",
+            "total_ttc",
+        ])
+        invoice.calculer_montants()
+        invoice.save(update_fields=["sous_total", "tva_montant", "total_ttc"])
+        return Response(
+            InvoiceSerializer(invoice, context={"request": request}).data
+        )
 
 
 class InvoicePDFView(APIView):
@@ -4479,19 +4660,15 @@ class InvoicePDFView(APIView):
                 {"detail": "Facture introuvable."},
                 status=status.HTTP_404_NOT_FOUND,
             )
+        from django.http import HttpResponse
+        from .pdf import render_invoice_pdf
 
-        if not invoice.pdf:
-            return Response(
-                {"detail": "PDF non encore généré."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        from django.http import FileResponse
-        return FileResponse(
-            invoice.pdf.open(),
-            as_attachment=True,
-            filename=f"{invoice.numero}.pdf",
+        pdf_bytes = render_invoice_pdf(invoice, request)
+        response = HttpResponse(pdf_bytes, content_type="application/pdf")
+        response["Content-Disposition"] = (
+            f'inline; filename="{invoice.numero}.pdf"'
         )
+        return response
 
 
 class InvoiceMarkSentView(APIView):
@@ -4562,6 +4739,52 @@ class InvoiceMarkPaidView(APIView):
         return Response({"message": "Facture marquée comme payée.", "payee_le": invoice.payee_le})
 
 
+class InvoiceCancelView(APIView):
+    """Annule une facture sans supprimer son numéro ni son historique."""
+
+    permission_classes = [HasBusinessPermission.require(Perm.RESERVATION_MANAGE)]
+
+    def post(self, request, business_id, invoice_id):
+        invoice = request.business.invoices.filter(id=invoice_id).first()
+        if invoice is None:
+            return Response(
+                {"detail": "Facture introuvable."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        if invoice.statut == Invoice.Statut.PAYEE:
+            return Response(
+                {"detail": "Impossible d'annuler une facture déjà payée."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        motif = str(request.data.get("motif") or "").strip()
+        if not motif:
+            return Response(
+                {"detail": "Le motif d'annulation est obligatoire."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        invoice.statut = Invoice.Statut.ANNULEE
+        invoice.motif_annulation = motif
+        invoice.date_annulation = timezone.now()
+        invoice.save(update_fields=[
+            "statut",
+            "motif_annulation",
+            "date_annulation",
+        ])
+
+        from .activite import log_activity, Act
+        log_activity(
+            business=request.business,
+            acteur=request.user,
+            action=Act.INVOICE_CREATE,
+            item=invoice.reservation.item,
+            cible=f"Invoice {invoice.numero}",
+            detail={"action": "annulee", "motif": motif},
+        )
+        return Response(
+            InvoiceSerializer(invoice, context={"request": request}).data
+        )
+
+
 class PublicInvoiceDetailView(APIView):
     """Téléchargement facture par le client (via token réservation).
 
@@ -4612,19 +4835,20 @@ class PublicInvoicePDFView(APIView):
         invoice = Invoice.objects.filter(
             business=business, reservation_id=reservation_id
         ).first()
-
-        if invoice is None or not invoice.pdf:
+        if invoice is None:
             return Response(
                 {"detail": "Facture ou PDF introuvable."},
                 status=status.HTTP_404_NOT_FOUND,
             )
+        from django.http import HttpResponse
+        from .pdf import render_invoice_pdf
 
-        from django.http import FileResponse
-        return FileResponse(
-            invoice.pdf.open(),
-            as_attachment=True,
-            filename=f"{invoice.numero}.pdf",
+        pdf_bytes = render_invoice_pdf(invoice, request)
+        response = HttpResponse(pdf_bytes, content_type="application/pdf")
+        response["Content-Disposition"] = (
+            f'inline; filename="{invoice.numero}.pdf"'
         )
+        return response
 
 
 class DeviceRegisterView(APIView):

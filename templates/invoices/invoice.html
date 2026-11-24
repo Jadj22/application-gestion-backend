@@ -1,0 +1,222 @@
+{% load invoice_filters %}
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <style>
+    @page {
+      size: A4;
+      margin: 15mm 12mm 15mm 12mm;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Times New Roman", serif;
+      font-size: 10.5pt;
+      color: #111;
+      background: transparent;
+    }
+    {% if watermark_url %}
+    body::before {
+      content: "";
+      position: fixed;
+      left: 32%;
+      top: 28%;
+      width: 36%;
+      height: 36%;
+      background: url("{{ watermark_url }}") center / contain no-repeat;
+      opacity: 0.045;
+      z-index: -1;
+      transform: rotate(-32deg);
+    }
+    {% endif %}
+    .invoice-page { position: relative; }
+    .header {
+      display: table;
+      width: 100%;
+      border-bottom: 4px double #111;
+      padding-bottom: 7mm;
+    }
+    .header-logo, .header-title {
+      display: table-cell;
+      vertical-align: middle;
+    }
+    .header-logo { width: 28mm; }
+    .header-logo img { max-height: 28mm; max-width: 28mm; object-fit: contain; }
+    .header-title { width: 125mm; text-align: center; }
+    .business-name {
+      color: #1f4e79;
+      font-size: 20pt;
+      font-weight: bold;
+      margin: 0;
+    }
+    .business-line { margin: 1mm 0; }
+    .invoice-meta {
+      display: table;
+      width: 100%;
+      margin: 5mm 0 4mm;
+    }
+    .invoice-meta-left, .invoice-meta-right { display: table-cell; width: 50%; vertical-align: top; }
+    .invoice-meta-right { text-align: right; }
+    table.invoice-table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      margin-top: 3mm;
+    }
+    table.invoice-table thead { display: table-header-group; }
+    table.invoice-table tr { page-break-inside: avoid; }
+    table.invoice-table th,
+    table.invoice-table td {
+      border: 0.25mm solid #111;
+      padding: 2.2mm 1.5mm;
+      vertical-align: middle;
+      text-align: center;
+    }
+    table.invoice-table th {
+      background: #d7e1f1;
+      font-weight: bold;
+    }
+    table.invoice-table th:nth-child(1), table.invoice-table td:nth-child(1) { width: 10%; }
+    table.invoice-table th:nth-child(2), table.invoice-table td:nth-child(2) { width: 38%; }
+    table.invoice-table th:nth-child(3), table.invoice-table td:nth-child(3) { width: 22%; }
+    table.invoice-table th:nth-child(4), table.invoice-table td:nth-child(4) { width: 15%; }
+    table.invoice-table th:nth-child(5), table.invoice-table td:nth-child(5) { width: 15%; }
+    table.invoice-table td.description { text-align: left; }
+    .line-image {
+      max-height: 28mm;
+      max-width: 45mm;
+      object-fit: contain;
+      display: block;
+      margin: 0 auto;
+    }
+    .forfait-label { text-align: center; font-weight: bold; }
+    .total-row td { font-weight: bold; }
+    .cancelled {
+      position: fixed;
+      left: 25%;
+      top: 38%;
+      width: 50%;
+      text-align: center;
+      transform: rotate(-32deg);
+      font-size: 42pt;
+      font-weight: bold;
+      color: rgba(180, 0, 0, 0.16);
+      z-index: 20;
+    }
+    .totals {
+      width: 55mm;
+      margin: 4mm 0 0 auto;
+      border-collapse: collapse;
+    }
+    .totals td { border: 0.25mm solid #111; padding: 1.8mm; }
+    .totals td:last-child { text-align: right; }
+    .signature {
+      width: 70mm;
+      margin: 12mm 0 0 auto;
+      text-align: center;
+      page-break-inside: avoid;
+    }
+    .signature .responsable {
+      text-decoration: underline;
+      font-weight: bold;
+      margin: 4mm 0 2mm;
+    }
+    .cachet { max-height: 32mm; max-width: 55mm; object-fit: contain; margin: 2mm auto; }
+    .signature-name { font-weight: bold; }
+  </style>
+</head>
+<body>
+  {% if invoice.statut == "ANNULEE" %}
+  <div class="cancelled">ANNULÉE</div>
+  {% endif %}
+  <div class="invoice-page">
+    <div class="header">
+      <div class="header-logo">
+        {% if logo_url %}<img src="{{ logo_url }}" alt="Logo">{% endif %}
+      </div>
+      <div class="header-title">
+        <div class="business-name">{{ business.nom }}</div>
+        <div class="business-line">LOCATION, VENTE DES ACCESSOIRES DE DECORATION ET PRESTATIONS</div>
+        <div class="business-line">
+          {% if business.rccm %}RCCM : {{ business.rccm }}{% endif %}
+          {% if business.nif %} &nbsp; NIF : {{ business.nif }}{% endif %}
+        </div>
+        <div class="business-line">
+          {% if business.tpu %}TPU : {{ business.tpu }}{% endif %}
+          {% if business.cnss %} &nbsp; CNSS : {{ business.cnss }}{% endif %}
+        </div>
+        <div class="business-line">{{ business.adresse }}</div>
+        <div class="business-line">{{ business.telephone }}{% if business.email %} &nbsp; {{ business.email }}{% endif %}</div>
+      </div>
+    </div>
+
+    <div class="invoice-meta">
+      <div class="invoice-meta-left">
+        <strong>Client :</strong> {{ invoice.client_nom }}<br>
+        {% if invoice.client_adresse %}{{ invoice.client_adresse }}<br>{% endif %}
+        {% if invoice.client_telephone %}Tél. : {{ invoice.client_telephone }}<br>{% endif %}
+        {% if invoice.client_email %}Email : {{ invoice.client_email }}{% endif %}
+      </div>
+      <div class="invoice-meta-right">
+        <strong>{{ invoice.numero }}</strong><br>
+        Type : {{ invoice.type_display }}<br>
+        Date : {{ invoice.generee_le|date:"d/m/Y" }}
+      </div>
+    </div>
+
+    <table class="invoice-table">
+      <thead>
+        <tr>
+          <th>Qté</th>
+          <th>Désignations</th>
+          <th>Illustrations</th>
+          <th>P. Unit.</th>
+          <th>P. Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for line in lines %}
+          {% if line.type_ligne == "forfait" %}
+          <tr>
+            <td colspan="4" class="forfait-label">{{ line.description }}</td>
+            <td>{{ line.total|fcfa }}</td>
+          </tr>
+          {% else %}
+          <tr>
+            <td>{{ line.quantite|default:"" }}</td>
+            <td class="description">{{ line.description }}</td>
+            <td>
+              {% if line.image_url %}<img class="line-image" src="{{ line.image_url }}" alt="">{% endif %}
+            </td>
+            <td>{{ line.prix_unitaire|fcfa }}</td>
+            <td>{{ line.total|fcfa }}</td>
+          </tr>
+          {% endif %}
+        {% endfor %}
+        <tr class="total-row">
+          <td colspan="4">TOTAL</td>
+          <td>{{ invoice.total_ttc|fcfa }}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <table class="totals">
+      <tr><td>Sous-total</td><td>{{ invoice.sous_total|fcfa }}</td></tr>
+      {% if invoice.tva_taux > 0 %}
+      <tr><td>TVA ({{ invoice.tva_taux|floatformat:"0" }}%)</td><td>{{ invoice.tva_montant|fcfa }}</td></tr>
+      {% endif %}
+      <tr><td><strong>TOTAL TTC</strong></td><td><strong>{{ invoice.total_ttc|fcfa }}</strong></td></tr>
+    </table>
+
+    {% if invoice.notes %}<p><strong>Notes :</strong> {{ invoice.notes }}</p>{% endif %}
+
+    <div class="signature">
+      <div><em>Fait à {{ business.adresse|truncatewords:3 }}, le {{ invoice.generee_le|date:"d/m/Y" }}</em></div>
+      <div class="responsable">{{ signature_title }}</div>
+      {% if cachet_url %}<img class="cachet" src="{{ cachet_url }}" alt="Cachet">{% endif %}
+      {% if business.signature_nom %}<div class="signature-name">{{ business.signature_nom }}</div>{% endif %}
+    </div>
+  </div>
+</body>
+</html>

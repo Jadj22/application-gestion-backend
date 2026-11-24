@@ -1,4 +1,5 @@
 import uuid
+from decimal import Decimal
 
 from django import VERSION as DJANGO_VERSION
 from django.contrib.auth.base_user import BaseUserManager
@@ -94,6 +95,13 @@ class Business(models.Model):
     email = models.EmailField(blank=True)
     logo_url = models.URLField(max_length=1000, blank=True)
     logo = models.ImageField(upload_to="businesses/logos/", blank=True, null=True)
+    rccm = models.CharField(max_length=100, blank=True)
+    nif = models.CharField(max_length=100, blank=True)
+    tpu = models.CharField(max_length=100, blank=True)
+    cnss = models.CharField(max_length=100, blank=True)
+    cachet = models.ImageField(upload_to="businesses/cachets/", blank=True, null=True)
+    signature_nom = models.CharField(max_length=150, blank=True)
+    signature_titre = models.CharField(max_length=150, blank=True)
     created_by = models.ForeignKey(
         User, on_delete=models.PROTECT, related_name="created_businesses"
     )
@@ -211,6 +219,9 @@ class BusinessMember(models.Model):
                 fields=["business", "user"], name="unique_member_per_business"
             )
         ]
+        indexes = [
+            models.Index(fields=["business", "statut"], name="idx_member_biz_statut"),
+        ]
         ordering = ["-invited_at"]
 
     def __str__(self):
@@ -249,6 +260,9 @@ class Category(models.Model):
             )
         ]
         ordering = ["nom"]
+        indexes = [
+            models.Index(fields=["business", "parent"], name="idx_cat_biz_parent"),
+        ]
 
     def __str__(self):
         return f"{self.nom} ({self.business_id})"
@@ -308,6 +322,11 @@ class Item(models.Model):
             )
         ]
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["business", "is_published", "statut"], name="idx_item_biz_pub_statut"),
+            models.Index(fields=["business", "category"], name="idx_item_biz_cat"),
+            models.Index(fields=["business", "statut"], name="idx_item_biz_statut2"),
+        ]
 
     def __str__(self):
         return self.nom
@@ -526,7 +545,9 @@ class MaintenanceTask(models.Model):
             models.Index(
                 fields=["business", "item", "created_at"],
                 name="idx_task_biz_item_date",
-            )
+            ),
+            models.Index(fields=["business", "statut", "created_at"], name="idx_task_biz_statut_date"),
+            models.Index(fields=["business", "assigned_to"], name="idx_task_biz_assigned"),
         ]
 
     def __str__(self):
@@ -938,6 +959,7 @@ class ActivityLog(models.Model):
             models.Index(
                 fields=["business", "item", "created_at"], name="idx_act_biz_item_date"
             ),
+            models.Index(fields=["business", "action"], name="idx_act_biz_action"),
         ]
 
     def __str__(self):
@@ -971,7 +993,8 @@ class Notification(models.Model):
         indexes = [
             models.Index(
                 fields=["business", "user", "created_at"], name="idx_notif_biz_user_date"
-            )
+            ),
+            models.Index(fields=["business", "user", "lu"], name="idx_notif_biz_user_lu"),
         ]
 
     def __str__(self):
@@ -1085,6 +1108,8 @@ class Reservation(models.Model):
             models.Index(
                 fields=["business", "item", "date_debut"], name="idx_res_biz_item_debut"
             ),
+            models.Index(fields=["business", "statut"], name="idx_res_biz_statut"),
+            models.Index(fields=["business", "reserve_par"], name="idx_res_biz_reserver"),
         ]
 
     def __str__(self):
@@ -1439,8 +1464,8 @@ class Invoice(models.Model):
     business = models.ForeignKey(
         Business, on_delete=models.CASCADE, related_name="invoices"
     )
-    reservation = models.OneToOneField(
-        Reservation, on_delete=models.PROTECT, related_name="invoice"
+    reservation = models.ForeignKey(
+        Reservation, on_delete=models.PROTECT, related_name="invoices"
     )
 
     numero = models.CharField(max_length=30, editable=False)
@@ -1461,6 +1486,9 @@ class Invoice(models.Model):
     tva_taux = models.DecimalField(max_digits=4, decimal_places=2, default=0, help_text="Ex: 18.00 pour 18%")
     tva_montant = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     total_ttc = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    notes = models.TextField(blank=True)
+    motif_annulation = models.TextField(blank=True)
+    date_annulation = models.DateTimeField(null=True, blank=True)
 
     # PDF généré
     pdf = models.FileField(upload_to="invoices/%Y/%m/", blank=True, null=True)
@@ -1534,9 +1562,17 @@ class Invoice(models.Model):
     def calculer_montants(self):
         """Recalcule sous_total, tva_montant, total_ttc depuis les lignes."""
         from decimal import Decimal
-        self.sous_total = sum(Decimal(str(l.get("total", 0))) for l in self.lignes)
+        line_rows = list(self.invoice_lines.all())
+        if line_rows:
+            sous_total = sum(
+                (line.total if line.total is not None else Decimal("0"))
+                for line in line_rows
+            )
+        else:
+            sous_total = sum(Decimal(str(l.get("total", 0))) for l in self.lignes)
+        self.sous_total = Decimal(str(sous_total)).quantize(Decimal("1"))
         self.tva_montant = (self.sous_total * Decimal(str(self.tva_taux)) / Decimal("100")).quantize(Decimal("0.01"))
-        self.total_ttc = (self.sous_total + self.tva_montant).quantize(Decimal("0.01"))
+        self.total_ttc = (self.sous_total + self.tva_montant).quantize(Decimal("1"))
 
     def generer_pdf(self):
         """Génère le PDF de la facture (à implémenter avec weasyprint/reportlab)."""
@@ -1551,6 +1587,58 @@ class Invoice(models.Model):
         self.statut = self.Statut.PAYEE
         self.payee_le = timezone.now()
         self.save(update_fields=["statut", "payee_le"])
+
+
+class InvoiceLine(models.Model):
+    class TypeLigne(models.TextChoices):
+        ARTICLE = "article", "Article"
+        FORFAIT = "forfait", "Forfait"
+
+    invoice = models.ForeignKey(
+        Invoice,
+        on_delete=models.CASCADE,
+        related_name="invoice_lines",
+    )
+    description = models.CharField(max_length=500)
+    type_ligne = models.CharField(
+        max_length=10,
+        choices=TypeLigne.choices,
+        default=TypeLigne.ARTICLE,
+    )
+    quantite = models.PositiveIntegerField(null=True, blank=True)
+    prix_unitaire = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
+    total = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+    )
+    image = models.ImageField(
+        upload_to="invoices/lines/",
+        blank=True,
+        null=True,
+    )
+    ordre = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["ordre", "id"]
+
+    def save(self, *args, **kwargs):
+        if self.type_ligne == self.TypeLigne.ARTICLE:
+            quantity = int(self.quantite or 0)
+            unit = self.prix_unitaire or 0
+            self.total = (Decimal(str(quantity)) * Decimal(str(unit))).quantize(
+                Decimal("1")
+            )
+        else:
+            self.quantite = None
+            self.prix_unitaire = None
+            self.total = Decimal(str(self.total or 0)).quantize(Decimal("1"))
+        super().save(*args, **kwargs)
 
 
 def generate_business_slug(sender, instance, created, **kwargs):
